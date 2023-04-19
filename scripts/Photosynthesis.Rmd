@@ -1645,7 +1645,8 @@ jpeg(filename = "figures/Growth/Growth_rate_kelp.jpeg",width=950, height=650)
 Growth_plot
 dev.off()
 
-################ Based on a script of Daniel Liesner
+# Growth rate vary with total lenght, let's take this variable into account by creating a model
+################ Based on a script of Daniel Liesner ##########
 Kelp_ID <- read_excel("data/Kelp_ID.xlsx", 
      col_types = c("numeric", "text", "numeric", 
          "text", "text", "numeric", "numeric", 
@@ -1654,15 +1655,43 @@ Growth_normalized<-merge(Kelp_ID,Growth,by="ID")
 Growth_normalized$`Total lenght (cm)`
 ### visually identify effects of initial length (covariate) on growth rates
 library(nlme)
-#length_lm <- lme(Growth_rate ~ `Total lenght (cm)`, weights = ~species,data=Growth_normalized)
-length_lm <- lm(Growth_rate ~ `Total lenght (cm)`,data=Growth_normalized)
-plot(Growth_rate ~ `Total lenght (cm)`, data=Growth_normalized)
+library(ggu.base.fun)
+# log transformation is necessary to look into a LINEAR model here
+# It allows the residuals to be normaly distributed (see later)
+Growth_normalized$lg_growth_rate<-log(Growth_normalized$Growth_rate)
+Growth_normalized$lg_total_lenght<-log(Growth_normalized$`Total lenght (cm)`)
+
+Growth_normalized <- Growth_normalized[!is.infinite(Growth_normalized$lg_growth_rate),] #remove inf values
+Growth_normalized <- Growth_normalized[!is.na(Growth_normalized$lg_growth_rate),] # remove NA
+length_lm <- lm(lg_growth_rate ~ lg_total_lenght,data=Growth_normalized)
+plot(lg_growth_rate ~ lg_total_lenght,data=Growth_normalized)
 abline(length_lm)
 summary(length_lm)
-# equation : y=0.2163884 + (-0.0011954)*total_lenght + 0.09646
-# with y = growth rate
-Growth_normalized$Normalized_growth_rate<-(0.2163884 + (-0.0011954)*Growth_normalized$`Total lenght (cm)` + 0.09646)
-ggplot(Growth_normalized,aes(x=treatment,fill=treatment))+
+# equation : log(y)=4.2797 + (-1.5663)*log(total_lenght) + 1.024
+Growth_normalized$Normalized_growth_rate<-10^(4.2797 + (-1.5663)*Growth_normalized$lg_total_lenght + 1.024)
+
+# normality of standardized model residuals
+length_lm_std <- residuals(length_lm, type="pearson")
+shapiro.test(length_lm_std) #p-value = 0.108, normality verified
+qqnorm(length_lm_std)
+qqline(length_lm_std)
+hist(length.lm.std, xlab="standardized residuals")
+
+# homogeneity of model variances
+leveneTest(length.lm.std , group = Growth_normalized$lg_growth_rate) # Normal
+leveneTest(length.lm.std , group = Growth_normalized$lg_total_lenght) # Normal
+
+### ANOVA for the final model
+anova(length_lm)
+#Analysis of Variance Table
+#Response: lg_growth_rate
+#                 Df  Sum Sq Mean Sq F value    Pr(>F)    
+#lg_total_lenght   1  32.777  32.777  31.274 1.081e-07 ***
+#Residuals       145 151.971   1.048                      
+#---
+#Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Normalized_growth_rate_kelp<-ggplot(Growth_normalized,aes(x=treatment,fill=treatment))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
   geom_boxplot(aes(y=Normalized_growth_rate),outlier.alpha = 0)+
@@ -1678,51 +1707,32 @@ ggplot(Growth_normalized,aes(x=treatment,fill=treatment))+
         legend.position="none")+
   labs(y="Growth rate (cm/day)",x="conditions")
 
-# normality of standardized model residuals
-length.lm.std <- residuals(length_lm, type="pearson")
-shapiro.test(length.lm.std)
-qqnorm(length.lm.std)
-qqline(length.lm.std)
-hist(length.lm.std, xlab="standardized residuals")
-
-# homogeneity of model variances
-plot(y = length.lm.std, x = data$variable1)
-leveneTest(length.m.std , group = data$variable1)
- 
-plot(y = length.m.std, x = data$variable2)
-leveneTest(length.m.std , group = data$variable2)
-
-
-# if normality or homogeneity assumptions are not met, try to incorporate the variance structure into the model using the "weights" function in lme
-# see the great book by Zuur et al 2009, Mixed effects models and extensions in ecology with R
-
-
-### ANOVA for the final model
-
-anova(length_lm)
-
+jpeg(filename = "figures/Growth/Normalized_growth_rate_kelp.jpeg",width=950, height=650)
+Normalized_growth_rate_kelp
+dev.off()
 
 # CORALLINE ####
 Corraline_growth <- read_excel("data/Corraline_growth.xlsx")
 Corraline_growth$treatment <- fct_relevel(Corraline_growth$treatment, c("C0","C1","C2","C3"))
 
-Corraline_growth_plot<-ggplot(Corraline_growth,aes(x=treatment,fill=treatment))+
-  #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
-  #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
-  geom_boxplot(aes(y=Delta_BW),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=Delta_BW,fill=treatment),color="black",size=3)+
-  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Corraline_growth,fun.data = give.n, geom = "text",size=10)+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
-        axis.text = element_text(size = rel(2)),
-        strip.text.x = element_text(size = rel(2)),
-        panel.border = element_rect(colour = "black", fill=NA),
-        legend.position="none")+
-  labs(y="Growth rate (cm/day)",x="conditions")
+# Plots  ####
+give.n <- function(x){
+   return(c(y = mean(x), label = length(x)))
+}
 
-# 3 outliers : -42.69, -39.48, -19.37
-ggqqplot(Corraline_growth$Delta_BW)
+#The average composition of minerals in the shells is approximately 90 percent calcite and 10 percent aragonite (Hutchinson and O'Sullivan 2008).
+Corraline_growth$density_T0 <- rho(S=33, T=Corraline_growth$T0_Temperature_BW, P=0)
+Corraline_growth$dry_weight_T0 <- Corraline_growth$T0_Buyant_weight*(1-((Corraline_growth$density_T0/1000)*((2.93^-1)*0.1+((2.71^-1)*0.9)))) 
+
+Corraline_growth$density_TF <- rho(S=33, T=Corraline_growth$TF_Temperature_BW, P=0)
+Corraline_growth$dry_weight_TF <- Corraline_growth$TF_Buyant_weight*(1-((Corraline_growth$density_TF/1000)*((2.93^-1)*0.1+((2.71^-1)*0.9))))
+
+Corraline_growth$delta_dry_weight<-Corraline_growth$dry_weight_TF-Corraline_growth$dry_weight_T0
+
+# 8 outliers : -42.69, -39.48, -19.37
+ggqqplot(Corraline_growth$delta_dry_weight)
+shapiro.test(Corraline_growth$delta_dry_weight) # not normal
+rosnerTest(Corraline_growth$delta_dry_weight, k = 8)$all.stats  # 8 outliers
 Corraline_growth<-Corraline_growth[!Corraline_growth$Delta_BW==-42.69,]
 Corraline_growth<-Corraline_growth[!Corraline_growth$ID==9,]
 Corraline_growth<-Corraline_growth[!Corraline_growth$Delta_BW==-19.37,]
@@ -1731,17 +1741,13 @@ Corraline_growth<-Corraline_growth[!Corraline_growth$ID==8,]
 Corraline_growth<-Corraline_growth[!Corraline_growth$ID==69,]
 Corraline_growth<-Corraline_growth[!Corraline_growth$ID==68,]
 Corraline_growth<-Corraline_growth[!Corraline_growth$ID==74,]
-rosnerTest(Corraline_growth$Delta_BW, k = 8)$all.stats # 8 outliers
-shapiro.test(Corraline_growth$Delta_BW) # normal
-# Plots  ####
-give.n <- function(x){
-   return(c(y = mean(x), label = length(x)))
-}
+shapiro.test(Corraline_growth$delta_dry_weight) # normal
+
 Corraline_growth_plot<-ggplot(Corraline_growth,aes(x=treatment,fill=treatment))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
-  geom_boxplot(aes(y=Delta_BW),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=Delta_BW,fill=treatment),color="black",size=3)+
+  geom_boxplot(aes(y=delta_dry_weight),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment),color="black",size=3)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
   stat_summary(aes(y=0.4,x=treatment),colour="black",data=Corraline_growth,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
@@ -1750,26 +1756,53 @@ Corraline_growth_plot<-ggplot(Corraline_growth,aes(x=treatment,fill=treatment))+
         strip.text.x = element_text(size = rel(2)),
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
-  labs(y="Delta BW",x="conditions")
+  labs(y="Delta dry weight (g)",x="conditions")
+
 jpeg(filename = "figures/Growth/Corraline_growth_plot.jpeg",width=950, height=650)
 Corraline_growth_plot
 dev.off()
 
-# SNAILS ####
 
+# SNAILS ####
 snails_growth <- read_excel("data/snails_growth.xlsx", 
      col_types = c("text", "numeric", "text", 
          "numeric", "numeric", "numeric", 
-         "date", "numeric", "text", "numeric", 
-         "text", "text", "date", "text", "text", 
+         "date", "numeric", "numeric", "numeric", 
+         "numeric", "text", "date", "text", "text", 
          "numeric", "numeric", "numeric", 
          "numeric", "numeric", "numeric", 
          "numeric", "text", "numeric"))
-ggplot(snails_growth,aes(x=treatment,fill=treatment))+
+
+snails_growth$density_T0 <- rho(S=33, T=snails_growth$T0_Temperature_BW, P=0)
+snails_growth$dry_weight_T0 <- snails_growth$T0_Buyant_weight*(1-((snails_growth$density_T0/1000)*((2.93^-1)*0.1+((2.71^-1)*0.9)))) 
+
+snails_growth$density_TF <- rho(S=33, T=snails_growth$TF_Temperature_BW, P=0)
+snails_growth$dry_weight_TF <- snails_growth$TF_Buyant_weight*(1-((snails_growth$density_TF/1000)*((2.93^-1)*0.1+((2.71^-1)*0.9))))
+
+snails_growth$delta_dry_weight<-snails_growth$dry_weight_TF-snails_growth$dry_weight_T0
+
+ggqqplot(snails_growth$delta_dry_weight)
+shapiro.test(snails_growth$delta_dry_weight) # not normal
+rosnerTest(snails_growth$delta_dry_weight, k = 6)$all.stats  # 11 outliers
+snails_growth$ID_color<-paste(snails_growth$ID,snails_growth$Color,sep="_")
+snails_growth<-snails_growth[!snails_growth$ID_color=="12_White",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="17_Red",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="8_Gold",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="9_White",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="7_Red",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="13_White",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="11_White",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="5_Red",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="14_Blue",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="14_Red",]
+snails_growth<-snails_growth[!snails_growth$ID_color=="5_Gold",]
+shapiro.test(snails_growth$delta_dry_weight) # normal
+
+Snails_growth_plot<-ggplot(snails_growth,aes(x=treatment,fill=treatment))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
-  geom_boxplot(aes(y=Delta_BW),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=Delta_BW,fill=treatment),color="black",size=3)+
+  geom_boxplot(aes(y=delta_dry_weight),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment),color="black",size=3)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
   stat_summary(aes(y=0.4,x=treatment),colour="black",data=snails_growth,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
@@ -1778,18 +1811,51 @@ ggplot(snails_growth,aes(x=treatment,fill=treatment))+
         strip.text.x = element_text(size = rel(2)),
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
-  labs(y="Delta BW",x="conditions")
+  labs(y="Delta dry weight (g)",x="conditions")
+
+jpeg(filename = "figures/Growth/Corraline_growth_plot.jpeg",width=950, height=650)
+Snails_growth_plot
+dev.off()
+
 # MUSSELS ####
+
 Mussels_growth <- read_excel("data/Mussels_growth.xlsx", 
-     col_types = c("text", "text", "text", 
-         "text", "text", "date", "numeric", 
-         "text", "numeric", "text", "text", 
-         "date", "text", "text", "text"))
+     col_types = c("text", "text", "numeric", 
+         "numeric", "date", "date", "numeric", 
+         "numeric", "numeric", "numeric", 
+         "numeric", "date", "text", "text", 
+         "text"))
+
+Mussels_growth$density_T0 <- rho(S=33, T=Mussels_growth$T0_Temperature_BW, P=0)
+Mussels_growth$dry_weight_T0 <- Mussels_growth$T0_Buyant_weight*(1-((Mussels_growth$density_T0/1000)*((2.93^-1)*0.1+((2.71^-1)*0.9)))) 
+
+Mussels_growth$density_TF <- rho(S=33, T=Mussels_growth$TF_Temperature_BW, P=0)
+Mussels_growth$dry_weight_TF <- Mussels_growth$TF_Buyant_weight*(1-((Mussels_growth$density_TF/1000)*((2.93^-1)*0.1+((2.71^-1)*0.9))))
+
+Mussels_growth$delta_dry_weight<-Mussels_growth$dry_weight_TF-Mussels_growth$dry_weight_T0
+
+ggqqplot(Mussels_growth$delta_dry_weight)
+shapiro.test(Mussels_growth$delta_dry_weight) # not normal
+rosnerTest(Mussels_growth$delta_dry_weight, k = 20)$all.stats  # 12 outliers
+Mussels_growth$ID_color<-paste(Mussels_growth$ID,Mussels_growth$Color,sep="_")
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="12_White",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="17_Red",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="8_Gold",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="9_White",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="7_Red",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="13_White",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="11_White",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="5_Red",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="14_Blue",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="14_Red",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="5_Gold",]
+shapiro.test(Mussels_growth$delta_dry_weight) # normal
+
 ggplot(Mussels_growth ,aes(x=treatment,fill=treatment))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
-  geom_boxplot(aes(y=Delta_BW),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=Delta_BW,fill=treatment),color="black",size=3)+
+  geom_boxplot(aes(y=delta_dry_weight),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment),color="black",size=3)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
   stat_summary(aes(y=0.4,x=treatment),colour="black",data=Mussels_growth ,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
