@@ -33,11 +33,82 @@ library(lme4)
 library(ggpubr)
 library(emmeans)
 #O2_raw_1 <- read_excel("/Users/anaislebrun/Desktop/These/Meso NYA 2021/O2/data/O2_individual_incubations.xlsx", 
-                                             col_types = c("text","text", "text","text","text", #"text", "date", "text", "numeric", "text","text", "numeric", "text", "numeric","numeric", "numeric", "numeric"))
+                                             #col_types = c("text","text", "text","text","text", #"text", "date", "text", "numeric", "text","text", "numeric", "text", "numeric","numeric", "numeric", "numeric"))
 
 #O2_raw_1<-drop_na(O2_raw_1, c(Salinity,Temp))
 #PAR_export <- read_excel("/Users/anaislebrun/Desktop/These/Meso NYA 2021/O2/data/PAR_data.xlsx", 
      #sheet = "Feuil2", col_types = c("date","numeric", "numeric", "numeric", "numeric"))
+```
+
+Let's look at the temperature within time for each condition. 
+
+```{r setup, include=FALSE, warning=FALSE}
+temperature <- read_excel("data/temperature.xlsx", 
+     col_types = c("date", "numeric", "numeric", 
+         "numeric", "numeric", "numeric", 
+         "numeric", "numeric", "numeric", 
+         "numeric", "numeric", "numeric", 
+         "numeric"))
+
+temperature$date<-temperature$...1
+temperature<-temperature[,-1]
+#temperature<-separate(col=date,c("date","time")," ",data=temperature)
+
+library(dplyr)
+library(lubridate)
+library(naniar)
+
+hour_temperature<-temperature %>% 
+  mutate(date = ymd_hms(date), dt = as_date(date), hr = hour(date)) %>% 
+  group_by(dt, hr) %>% 
+  filter(date == min(date)) %>% 
+  replace_with_na_all(condition = ~.x <= 0)%>% 
+  ungroup()
+
+hour_temperature$C0<-rowMeans(hour_temperature[,1:3])
+hour_temperature$C1<-rowMeans(hour_temperature[,4:6])
+hour_temperature$C2<-rowMeans(hour_temperature[,7:9])
+hour_temperature$C3<-rowMeans(hour_temperature[,10:12])
+
+
+Temperature_plot<-ggplot(hour_temperature,aes(x=date))+
+  geom_point(aes(y=C3),color="#901C21")+geom_line(aes(y=C3),size=3,color="#901C21",alpha=0.4)+
+  geom_point(aes(y=C2),color="#FC1D28")+geom_line(aes(y=C2),size=3,color="#FC1D28",alpha=0.4)+
+  geom_point(aes(y=C1),color="#E48121")+geom_line(aes(y=C1),size=3,color="#E48121",alpha=0.4)+
+  geom_point(aes(y=C0),color="#92c5de")+ geom_line(aes(y=C0),size=3,color="#92c5de",alpha=0.4)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(x="time",y="Temperature (°C)")
+
+jpeg(filename = "figures/Temperature_plot.jpeg",width=950, height=650)
+Temperature_plot
+dev.off()
+
+delta_temperature<-hour_temperature %>% 
+  summarise(deltaC1=C1-C0,deltaC2=C2-C0,deltaC3=C3-C0)
+
+delta_temperature$date<-hour_temperature$date
+delta_temperature_plot<-ggplot(delta_temperature,aes(x=date))+
+  geom_point(aes(y=deltaC3),color="#901C21")+geom_line(aes(y=deltaC3),size=3,color="#901C21",alpha=0.4)+
+  geom_point(aes(y=deltaC2),color="#FC1D28")+geom_line(aes(y=deltaC2),size=3,color="#FC1D28",alpha=0.4)+
+  geom_point(aes(y=deltaC1),color="#E48121")+geom_line(aes(y=deltaC1),size=3,color="#E48121",alpha=0.4)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(x="time",y="Delta Temperature (°C)")
+
+jpeg(filename = "figures/delta_temperature_plot.jpeg",width=950, height=650)
+delta_temperature_plot
+dev.off()
+
+
 ```
 
 Here are plotted all the raw $O_{2}$ measurements (1 measurement/minute) from the individual incubations. Most of them lasted 30 min, some lasted 60 min.
@@ -1201,6 +1272,7 @@ TukeyHSD(Anova_N)
 ## 11° Diving PAM <br>
 
 ```{r PAM, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
+#### KELP ####
 Kelp_Pam <- read_excel("data/Kelp_Pam.xlsx", col_types = c("date", 
      "text", "text", "text", "text", "text", 
      "numeric", "numeric", "numeric", "numeric", 
@@ -1214,7 +1286,7 @@ Kelp_Pam_plot<-ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
   geom_boxplot(outlier.alpha = 0)+
   geom_jitter(shape = 21,color="black",size=3)+
   facet_wrap(~species)+
-  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
   stat_summary(aes(y=0.4,x=treatment),colour="black",data=Kelp_Pam,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
@@ -1230,14 +1302,166 @@ Kelp_Pam_plot
 dev.off()
 
 Kelp_Pam$group<-paste0(Kelp_Pam$treatment,Kelp_Pam$Date,sep="_")
+Kelp_Pam$Date<-as.POSIXct(Kelp_Pam$Date,format="%Y-%M-%D")
 
 Kelp_Pam_alongtime_plot<-ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=Date,color=treatment))+
   geom_jitter(shape = 16,size=3,alpha=0.8)+
-  geom_smooth(se=F,size=2,alpha=0.5)+
+  #geom_smooth(se=F,size=2,alpha=0.5)+
   geom_boxplot(aes(x=Date,group=group,fill=treatment),color="black",outlier.alpha = 0)+
   facet_wrap(species~.,ncol=1)+
-  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  scale_color_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+   ylab(bquote(F[v]/F[m]))+
+  #scale_x_continuous(breaks=c("2022-07-02 UTC","2022-07-07 UTC","2022-07-11 UTC","2022-07-14 UTC","2022-07-18 UTC","2022-07-21 UTC","2022-07-22 UTC")+
+  labs(x="conditions")
+
+
+# to do :
+# changer les stick x : mettre 1 axe par date (donc 7 tick)
+# ploter la température (sur un autre graph ? ou par dessus ?)
+
+jpeg(filename = "figures/PAM/Kelp_Pam_alongtime_plot.jpeg",width=950, height=650)
+Kelp_Pam_alongtime_plot
+dev.off()
+
+# Is there outlier ? 
+library(EnvStats)
+library(ggpubr)
+# ALARIA ####
+AE_PAM<-Kelp_Pam[Kelp_Pam$species=="Alaria",]
+
+AE_PAM_C0<-AE_PAM[AE_PAM$treatment=="C0",]
+#AE_PAM_C0_day1<-AE_PAM_C0[AE_PAM_C0$Sampling=="exp_day1",]
+rosnerTest(AE_PAM_C0$`Fv/Fm`, k = 1)$all.stats # 1 outlier
+AE_PAM_C0<-AE_PAM_C0[!AE_PAM_C0$`Fv/Fm`==0.624,]
+shapiro.test(AE_PAM_C0$`Fv/Fm`) # Normal (pvalue>0.05)
+ggqqplot(AE_PAM_C0$`Fv/Fm`)
+
+AE_PAM_C2<-AE_PAM[AE_PAM$treatment=="C2",]
+AE_PAM_C2_day1<-AE_PAM_C2[AE_PAM_C2$Sampling=="exp_day1",]
+rosnerTest(AE_PAM_C2_day1$`Fv/Fm`, k = 2)$all.stats # no outlier 
+shapiro.test(AE_PAM_C2_day1$`Fv/Fm`) # not Normal (pvalue<0.05)
+ggqqplot(AE_PAM_C2_day1$`Fv/Fm`) #0.390 seems to be an outlier, what if we compare with all the pam data of Alaria ?
+rosnerTest(AE_PAM_C2$`Fv/Fm`, k = 2)$all.stats #2 outliers : 0.390 & 0.623
+shapiro.test(AE_PAM_C2$`Fv/Fm`) # not normal
+ggqqplot(AE_PAM_C2$`Fv/Fm`) # indeed, 2 outLIERS
+AE_PAM_C2<-AE_PAM_C2[!AE_PAM_C2$`Fv/Fm`==0.390,]
+AE_PAM_C2<-AE_PAM_C2[!AE_PAM_C2$`Fv/Fm`==0.623,]
+
+AE_PAM_C1<-AE_PAM[AE_PAM$treatment=="C1",]
+ggqqplot(AE_PAM_C1$`Fv/Fm`) 
+rosnerTest(AE_PAM_C1$`Fv/Fm`, k = 1)$all.stats #0.647 is an outlier
+AE_PAM_C1<-AE_PAM_C1[!AE_PAM_C1$`Fv/Fm`==0.647,]
+
+AE_PAM_C3<-AE_PAM[AE_PAM$treatment=="C3",]
+ggqqplot(AE_PAM_C3$`Fv/Fm`) 
+rosnerTest(AE_PAM_C3$`Fv/Fm`, k = 1)$all.stats #no outlier
+
+# Rbind
+AE_PAM<-rbind(AE_PAM_C0,AE_PAM_C1,AE_PAM_C2,AE_PAM_C3)
+rm(AE_PAM_C0,AE_PAM_C1,AE_PAM_C2,AE_PAM_C3)
+# LAMINARIA ####
+LD_PAM<-Kelp_Pam[Kelp_Pam$species=="Laminaria",]
+
+LD_PAM_C0<-LD_PAM[LD_PAM$treatment=="C0",]
+ggqqplot(LD_PAM_C0$`Fv/Fm`)
+rosnerTest(LD_PAM_C0$`Fv/Fm`, k = 2)$all.stats # 2 outliers:  0.473 & 0.478
+LD_PAM_C0<-LD_PAM_C0[!LD_PAM_C0$`Fv/Fm`==0.473,]
+LD_PAM_C0<-LD_PAM_C0[!LD_PAM_C0$`Fv/Fm`==0.478,]
+shapiro.test(LD_PAM_C0$`Fv/Fm`) # Normal (pvalue>0.05)
+ggqqplot(LD_PAM_C0$`Fv/Fm`)
+
+LD_PAM_C1<-LD_PAM[LD_PAM$treatment=="C1",]
+rosnerTest(LD_PAM_C1$`Fv/Fm`, k = 1)$all.stats # 1 outlier : 0.528
+LD_PAM_C1<-LD_PAM_C1[!LD_PAM_C1$`Fv/Fm`==0.528,]
+shapiro.test(LD_PAM_C1$`Fv/Fm`) # Normal (pvalue>0.05)
+ggqqplot(LD_PAM_C1$`Fv/Fm`)
+
+LD_PAM_C2<-LD_PAM[LD_PAM$treatment=="C2",]
+rosnerTest(LD_PAM_C2$`Fv/Fm`, k = 2)$all.stats # 2 outliers : 0.523 & 0.577
+LD_PAM_C2<-LD_PAM_C2[!LD_PAM_C2$`Fv/Fm`==0.523,]
+LD_PAM_C2<-LD_PAM_C2[!LD_PAM_C2$`Fv/Fm`==0.577,]
+shapiro.test(LD_PAM_C2$`Fv/Fm`) # Normal (pvalue>0.05)
+ggqqplot(LD_PAM_C2$`Fv/Fm`)
+
+
+LD_PAM_C3<-LD_PAM[LD_PAM$treatment=="C3",]
+rosnerTest(LD_PAM_C3$`Fv/Fm`, k = 1)$all.stats # 1 outlier : 0.409
+LD_PAM_C3<-LD_PAM_C3[!LD_PAM_C3$`Fv/Fm`==0.409,]
+shapiro.test(LD_PAM_C3$`Fv/Fm`) # Normal (pvalue>0.05)
+ggqqplot(LD_PAM_C3$`Fv/Fm`)
+
+LD_PAM<-rbind(LD_PAM_C0,LD_PAM_C1,LD_PAM_C2,LD_PAM_C3)
+rm(LD_PAM_C0,LD_PAM_C1,LD_PAM_C2,LD_PAM_C3)
+
+# SACCHARINA ####
+
+SL_PAM<-Kelp_Pam[Kelp_Pam$species=="Saccharina",]
+
+SL_PAM_C0<-SL_PAM[SL_PAM$treatment=="C0",]
+ggqqplot(SL_PAM_C0$`Fv/Fm`)
+rosnerTest(SL_PAM_C0$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(SL_PAM_C0$`Fv/Fm`) # Normal (pvalue>0.05)
+
+SL_PAM_C1<-SL_PAM[SL_PAM$treatment=="C1",]
+ggqqplot(SL_PAM_C1$`Fv/Fm`)
+rosnerTest(SL_PAM_C1$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(SL_PAM_C1$`Fv/Fm`) # not Normal (pvalue>0.05)
+# issue in one sampling day ?
+SL_PAM_C1_day1<-SL_PAM_C1[SL_PAM_C1$Sampling=="T0",]
+ggqqplot(SL_PAM_C1_day1$`Fv/Fm`) # ok no outlier
+
+SL_PAM_C2<-SL_PAM[SL_PAM$treatment=="C2",]
+ggqqplot(SL_PAM_C2$`Fv/Fm`)
+rosnerTest(SL_PAM_C2$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(SL_PAM_C2$`Fv/Fm`)
+
+SL_PAM_C3<-SL_PAM[SL_PAM$treatment=="C3",]
+ggqqplot(SL_PAM_C3$`Fv/Fm`)
+rosnerTest(SL_PAM_C3$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(SL_PAM_C3$`Fv/Fm`)
+
+# NO outlier with SL
+SL_PAM<-rbind(SL_PAM_C0,SL_PAM_C1,SL_PAM_C2,SL_PAM_C3)
+rm(SL_PAM_C0,SL_PAM_C1,SL_PAM_C2,SL_PAM_C3)
+
+Kelp_PAM_no_outlier<-rbind(AE_PAM,LD_PAM,SL_PAM)
+
+# PLOTs without the outliers: 
+Kelp_PAM_no_outlier_no_T0<-Kelp_PAM_no_outlier[!Kelp_PAM_no_outlier$Sampling=="T0",]
+Kelp_Pam_plot_no_outlier<-ggplot(Kelp_PAM_no_outlier_no_T0,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
+  geom_boxplot(outlier.alpha = 0)+
+  geom_jitter(shape = 21,color="black",size=3)+
+  facet_wrap(~species)+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Kelp_Pam,fun.data = give.n, geom = "text",size=10)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+   ylab(bquote(F[v]/F[m]))+
+  labs(x="conditions")
+
+jpeg(filename = "figures/PAM/Kelp_Pam_alperiod_plot_no_outlier.jpeg",width=950, height=650)
+Kelp_Pam_plot_no_outlier
+dev.off()
+
+
+Kelp_Pam_alongtime_plot_no_outlier<-ggplot(Kelp_PAM_no_outlier,aes(y=`Fv/Fm`,x=Date,color=treatment))+
+  geom_jitter(shape = 16,size=3,alpha=0.8)+
+  #geom_smooth(se=F,size=2,alpha=0.5)+
+  geom_boxplot(aes(x=Date,group=group,fill=treatment),color="black",outlier.alpha = 0)+
+  facet_wrap(species~.,ncol=1)+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1249,18 +1473,124 @@ Kelp_Pam_alongtime_plot<-ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=Date,color=treatment))+
 
 # to do :
 # changer les stick x : mettre 1 axe par date (donc 7 tick)
-# supprimer les outliers
 # ploter la température (sur un autre graph ? ou par dessus ?)
 
-jpeg(filename = "figures/PAM/Kelp_Pam_alongtime_plot.jpeg",width=950, height=650)
-Kelp_Pam_alongtime_plot
+jpeg(filename = "figures/PAM/Kelp_Pam_alongtime_plot_no_outlier.jpeg",width=950, height=650)
+Kelp_Pam_alongtime_plot_no_outlier
 dev.off()
 
+#### CORALLINE ####
+Coralline_PAM <- read_excel("data/Coralline_PAM_data.xlsx")
+give.n <- function(x){
+   return(c(y = mean(x), label = length(x)))
+}
+
+# All period merged
+Coralline_Pam_allperiod_plot<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
+  geom_boxplot(outlier.alpha = 0)+
+  geom_jitter(shape = 21,color="black",size=3)+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Coralline_PAM,fun.data = give.n, geom = "text",size=10)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+   ylab(bquote(F[v]/F[m]))+
+  labs(x="conditions")
+
+jpeg(filename = "figures/PAM/Coralline_Pam_allperiod_plot.jpeg",width=950, height=650)
+Coralline_Pam_allperiod_plot
+dev.off()
+
+Coralline_PAM$group<-paste0(Coralline_PAM$treatment,Coralline_PAM$Date,sep="_")
+
+Coralline_PAM_alongtime_plot<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=Date,color=treatment))+
+  geom_jitter(shape = 16,size=3,alpha=0.8)+
+  #geom_smooth(se=F,size=2,alpha=0.5)+
+  geom_boxplot(aes(x=Date,group=group,fill=treatment),color="black",outlier.alpha = 0)+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+   ylab(bquote(F[v]/F[m]))+
+  labs(x="conditions")
+
+jpeg(filename = "figures/PAM/Coralline_PAM_alongtime_plot.jpeg",width=950, height=650)
+Coralline_PAM_alongtime_plot
+dev.off()
+
+# is there any outlier ?
+Coralline_PAM_C0<-Coralline_PAM[Coralline_PAM$treatment=="C0",]
+ggqqplot(Coralline_PAM_C0$`Fv/Fm`)
+rosnerTest(Coralline_PAM_C0$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(Coralline_PAM_C0$`Fv/Fm`) # Normal
+
+Coralline_PAM_C1<-Coralline_PAM[Coralline_PAM$treatment=="C1",]
+ggqqplot(Coralline_PAM_C1$`Fv/Fm`)
+rosnerTest(Coralline_PAM_C1$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(Coralline_PAM_C1$`Fv/Fm`) #Normal
+
+Coralline_PAM_C2<-Coralline_PAM[Coralline_PAM$treatment=="C2",]
+ggqqplot(Coralline_PAM_C2$`Fv/Fm`)
+rosnerTest(Coralline_PAM_C2$`Fv/Fm`, k = 1)$all.stats # 1 outlier : 0.707 
+Coralline_PAM_C2<-Coralline_PAM_C2[!Coralline_PAM_C2$`Fv/Fm`==0.707 ,]
+shapiro.test(Coralline_PAM_C2$`Fv/Fm`) 
+
+Coralline_PAM_C3<-Coralline_PAM[Coralline_PAM$treatment=="C3",]
+ggqqplot(Coralline_PAM_C3$`Fv/Fm`)
+rosnerTest(Coralline_PAM_C3$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(Coralline_PAM_C3$`Fv/Fm`) #Normal
+
+Coralline_PAM<-Coralline_PAM[!Coralline_PAM$`Fv/Fm`==0.707 ,]
+
+# Plots without the outlier:
+Coralline_Pam_allperiod_plot_no_outlier<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
+  geom_boxplot(outlier.alpha = 0)+
+  geom_jitter(shape = 21,color="black",size=3)+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Coralline_PAM,fun.data = give.n, geom = "text",size=10)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+   ylab(bquote(F[v]/F[m]))+
+  labs(x="conditions")
+
+jpeg(filename = "figures/PAM/Coralline_Pam_allperiod_plot_no_outlier.jpeg",width=950, height=650)
+Coralline_Pam_allperiod_plot_no_outlier
+dev.off()
+
+Coralline_PAM_alongtime_plot_no_outlier<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=Date,color=treatment))+
+  geom_jitter(shape = 16,size=3,alpha=0.8)+
+  #geom_smooth(se=F,size=2,alpha=0.5)+
+  geom_boxplot(aes(x=Date,group=group,fill=treatment),color="black",outlier.alpha = 0)+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+   ylab(bquote(F[v]/F[m]))+
+  labs(x="conditions")
+
+jpeg(filename = "figures/PAM/Coralline_PAM_alongtime_plot_no_outlier.jpeg",width=950, height=650)
+Coralline_PAM_alongtime_plot_no_outlier
+dev.off()
 ```
 
 ## 8° Growth <br>
 ```{r Growth , echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
-
+# KELP ####
 Growth <-  read_excel("data/GROWTH.xlsx", 
      col_types = c("text", "numeric", "text", 
          "text", "text", "text", "numeric", 
@@ -1294,6 +1624,7 @@ give.n <- function(x){
 
 #Growth<-inner_join(Growth,Growth_sd,by=c("species","treatment"))
 
+
 Growth_plot<-ggplot(Growth,aes(x=treatment,fill=treatment))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
@@ -1313,6 +1644,180 @@ Growth_plot<-ggplot(Growth,aes(x=treatment,fill=treatment))+
 jpeg(filename = "figures/Growth/Growth_rate_kelp.jpeg",width=950, height=650)
 Growth_plot
 dev.off()
+
+################ Based on a script of Daniel Liesner
+Kelp_ID <- read_excel("data/Kelp_ID.xlsx", 
+     col_types = c("numeric", "text", "numeric", 
+         "text", "text", "numeric", "numeric", 
+         "numeric", "text", "text", "text"))
+Growth_normalized<-merge(Kelp_ID,Growth,by="ID")
+Growth_normalized$`Total lenght (cm)`
+### visually identify effects of initial length (covariate) on growth rates
+library(nlme)
+#length_lm <- lme(Growth_rate ~ `Total lenght (cm)`, weights = ~species,data=Growth_normalized)
+length_lm <- lm(Growth_rate ~ `Total lenght (cm)`,data=Growth_normalized)
+plot(Growth_rate ~ `Total lenght (cm)`, data=Growth_normalized)
+abline(length_lm)
+summary(length_lm)
+# equation : y=0.2163884 + (-0.0011954)*total_lenght + 0.09646
+# with y = growth rate
+Growth_normalized$Normalized_growth_rate<-(0.2163884 + (-0.0011954)*Growth_normalized$`Total lenght (cm)` + 0.09646)
+ggplot(Growth_normalized,aes(x=treatment,fill=treatment))+
+  #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
+  #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
+  geom_boxplot(aes(y=Normalized_growth_rate),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=Normalized_growth_rate,fill=treatment),color="black",size=3)+
+  facet_wrap(~species)+
+  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Growth_normalized,fun.data = give.n, geom = "text",size=10)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(y="Growth rate (cm/day)",x="conditions")
+
+# normality of standardized model residuals
+length.lm.std <- residuals(length_lm, type="pearson")
+shapiro.test(length.lm.std)
+qqnorm(length.lm.std)
+qqline(length.lm.std)
+hist(length.lm.std, xlab="standardized residuals")
+
+# homogeneity of model variances
+plot(y = length.lm.std, x = data$variable1)
+leveneTest(length.m.std , group = data$variable1)
+ 
+plot(y = length.m.std, x = data$variable2)
+leveneTest(length.m.std , group = data$variable2)
+
+
+# if normality or homogeneity assumptions are not met, try to incorporate the variance structure into the model using the "weights" function in lme
+# see the great book by Zuur et al 2009, Mixed effects models and extensions in ecology with R
+
+
+### ANOVA for the final model
+
+anova(length_lm)
+
+
+# CORALLINE ####
+Corraline_growth <- read_excel("data/Corraline_growth.xlsx")
+Corraline_growth$treatment <- fct_relevel(Corraline_growth$treatment, c("C0","C1","C2","C3"))
+
+Corraline_growth_plot<-ggplot(Corraline_growth,aes(x=treatment,fill=treatment))+
+  #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
+  #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
+  geom_boxplot(aes(y=Delta_BW),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=Delta_BW,fill=treatment),color="black",size=3)+
+  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Corraline_growth,fun.data = give.n, geom = "text",size=10)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(y="Growth rate (cm/day)",x="conditions")
+
+# 3 outliers : -42.69, -39.48, -19.37
+ggqqplot(Corraline_growth$Delta_BW)
+Corraline_growth<-Corraline_growth[!Corraline_growth$Delta_BW==-42.69,]
+Corraline_growth<-Corraline_growth[!Corraline_growth$ID==9,]
+Corraline_growth<-Corraline_growth[!Corraline_growth$Delta_BW==-19.37,]
+Corraline_growth<-Corraline_growth[!Corraline_growth$ID==70,]
+Corraline_growth<-Corraline_growth[!Corraline_growth$ID==8,]
+Corraline_growth<-Corraline_growth[!Corraline_growth$ID==69,]
+Corraline_growth<-Corraline_growth[!Corraline_growth$ID==68,]
+Corraline_growth<-Corraline_growth[!Corraline_growth$ID==74,]
+rosnerTest(Corraline_growth$Delta_BW, k = 8)$all.stats # 8 outliers
+shapiro.test(Corraline_growth$Delta_BW) # normal
+# Plots  ####
+give.n <- function(x){
+   return(c(y = mean(x), label = length(x)))
+}
+Corraline_growth_plot<-ggplot(Corraline_growth,aes(x=treatment,fill=treatment))+
+  #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
+  #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
+  geom_boxplot(aes(y=Delta_BW),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=Delta_BW,fill=treatment),color="black",size=3)+
+  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Corraline_growth,fun.data = give.n, geom = "text",size=10)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(y="Delta BW",x="conditions")
+jpeg(filename = "figures/Growth/Corraline_growth_plot.jpeg",width=950, height=650)
+Corraline_growth_plot
+dev.off()
+
+# SNAILS ####
+
+snails_growth <- read_excel("data/snails_growth.xlsx", 
+     col_types = c("text", "numeric", "text", 
+         "numeric", "numeric", "numeric", 
+         "date", "numeric", "text", "numeric", 
+         "text", "text", "date", "text", "text", 
+         "numeric", "numeric", "numeric", 
+         "numeric", "numeric", "numeric", 
+         "numeric", "text", "numeric"))
+ggplot(snails_growth,aes(x=treatment,fill=treatment))+
+  #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
+  #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
+  geom_boxplot(aes(y=Delta_BW),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=Delta_BW,fill=treatment),color="black",size=3)+
+  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment),colour="black",data=snails_growth,fun.data = give.n, geom = "text",size=10)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(y="Delta BW",x="conditions")
+# MUSSELS ####
+Mussels_growth <- read_excel("data/Mussels_growth.xlsx", 
+     col_types = c("text", "text", "text", 
+         "text", "text", "date", "numeric", 
+         "text", "numeric", "text", "text", 
+         "date", "text", "text", "text"))
+ggplot(Mussels_growth ,aes(x=treatment,fill=treatment))+
+  #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
+  #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
+  geom_boxplot(aes(y=Delta_BW),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=Delta_BW,fill=treatment),color="black",size=3)+
+  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Mussels_growth ,fun.data = give.n, geom = "text",size=10)+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(y="Delta BW",x="conditions")
+# URCHINS ####
+urchins_biomass <- read_excel("data/urchins_biomass.xlsx", 
+     col_types = c("text", "text", "numeric", 
+         "numeric", "numeric", "numeric", 
+         "numeric"))
+ggplot(urchins_biomass ,aes(x=treatment,fill=treatment))+
+  #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
+  #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
+  geom_boxplot(aes(y=Delta_BW_n,label=n_TF),outlier.alpha = 0)+
+  geom_jitter(shape = 21,aes(y=Delta_BW_n,fill=treatment),color="black",size=3)+
+  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
+  geom_label(aes(y=Delta_BW_n,label=n_TF))+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(y="Delta BW",x="conditions")
 ```
 
 Observations:  <br>
