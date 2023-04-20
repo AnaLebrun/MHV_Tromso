@@ -1870,7 +1870,7 @@ urchins_biomass <- read_excel("data/urchins_biomass.xlsx",
      col_types = c("text", "text", "numeric", 
          "numeric", "numeric", "numeric", 
          "numeric"))
-ggplot(urchins_biomass ,aes(x=treatment,fill=treatment))+
+urchins_biomass<-ggplot(urchins_biomass ,aes(x=treatment,fill=treatment))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
   geom_boxplot(aes(y=Delta_BW_n,label=n_TF),outlier.alpha = 0)+
@@ -1884,6 +1884,12 @@ ggplot(urchins_biomass ,aes(x=treatment,fill=treatment))+
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
   labs(y="Delta BW",x="conditions")
+
+
+jpeg(filename = "figures/Growth/urchins_biomass.jpeg",width=950, height=650)
+urchins_biomass
+dev.off()
+
 ```
 
 Observations:  <br>
