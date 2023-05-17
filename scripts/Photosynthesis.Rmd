@@ -5,8 +5,10 @@ date: "2023-04-14"
 output: html_document
 ---
 
-In this document are presented the individual incubations data from the mesocosm experiment that took place in Tromso in summer 2022. Two species were investigated : *Saccharina latissima* (SL) and *Alaria esculenta* (AE). Each species have been incubated at $T_{0}$, during the experiment and at $T_{F}$.
-
+In this document are presented the data from the mesocosm experiment that took place in Tromso in summer 2022. The focus of the experiment was to test the effect of marine heat wave(s) (MHV) on the Arctic benthic community.   
+Data analyse includes chla content, quantum yield measurement, C/N, growth rate & photosynthesis rate.    
+Depending on the parameter, two or three kelp species were investigated : *Saccharina latissima* (SL), *Alaria esculenta* (AE) and *Laminaria digitata* (LD).    
+    
 ```{r setup, include=FALSE, warning=FALSE}
 library(Rcpp)
 library(readxl)
@@ -32,15 +34,11 @@ library(rstatix)
 library(lme4)
 library(ggpubr)
 library(emmeans)
-#O2_raw_1 <- read_excel("/Users/anaislebrun/Desktop/These/Meso NYA 2021/O2/data/O2_individual_incubations.xlsx", 
-                                             #col_types = c("text","text", "text","text","text", #"text", "date", "text", "numeric", "text","text", "numeric", "text", "numeric","numeric", "numeric", "numeric"))
-
-#O2_raw_1<-drop_na(O2_raw_1, c(Salinity,Temp))
-#PAR_export <- read_excel("/Users/anaislebrun/Desktop/These/Meso NYA 2021/O2/data/PAR_data.xlsx", 
-     #sheet = "Feuil2", col_types = c("date","numeric", "numeric", "numeric", "numeric"))
 ```
 
-Let's look at the temperature within time for each condition. 
+Let's first look at the temperature :    
+- 1) within time for each condition.    
+- 2) the delta temperature between the control and each condition.   
 
 ```{r setup, include=FALSE, warning=FALSE}
 temperature <- read_excel("data/temperature.xlsx", 
@@ -77,9 +75,11 @@ Temperature_plot<-ggplot(hour_temperature,aes(x=date))+
   geom_point(aes(y=C1),color="#E48121")+geom_line(aes(y=C1),size=3,color="#E48121",alpha=0.4)+
   geom_point(aes(y=C0),color="#92c5de")+ geom_line(aes(y=C0),size=3,color="#92c5de",alpha=0.4)+
   theme_fira()+
+  scale_x_datetime(minor_breaks = "day",breaks=seq(as.POSIXct("2022-06-30 12:46:11 CET"),as.POSIXct("2022-07-25 07:00:03 CET"), by="48 hours"),date_labels = "%m-%d")+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
         strip.text.x = element_text(size = rel(2)),
+        axis.text.x = element_text(angle = 60, vjust = 0.5, hjust=0.5),
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
   labs(x="time",y="Temperature (°C)")
@@ -97,8 +97,10 @@ delta_temperature_plot<-ggplot(delta_temperature,aes(x=date))+
   geom_point(aes(y=deltaC2),color="#FC1D28")+geom_line(aes(y=deltaC2),size=3,color="#FC1D28",alpha=0.4)+
   geom_point(aes(y=deltaC1),color="#E48121")+geom_line(aes(y=deltaC1),size=3,color="#E48121",alpha=0.4)+
   theme_fira()+
+  scale_x_datetime(minor_breaks = "day",breaks=seq(as.POSIXct("2022-06-30 12:46:11 CET"),as.POSIXct("2022-07-25 07:00:03 CET"), by="48 hours"),date_labels = "%m/%d")+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
+        axis.text.x = element_text(angle = 60, vjust = 0.5, hjust=0.5),
         strip.text.x = element_text(size = rel(2)),
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
@@ -107,813 +109,17 @@ delta_temperature_plot<-ggplot(delta_temperature,aes(x=date))+
 jpeg(filename = "figures/delta_temperature_plot.jpeg",width=950, height=650)
 delta_temperature_plot
 dev.off()
-
-
 ```
 
-Here are plotted all the raw $O_{2}$ measurements (1 measurement/minute) from the individual incubations. Most of them lasted 30 min, some lasted 60 min.
-
-```{r raw data,echo=FALSE,warning=FALSE,fig.width=15,fig.height=15}
-
-# graph O2 concentration with time for each ID
-ggplot(O2_raw_1,aes(dt,O2))+
-  geom_point(aes(group=grp,color=week))+
-  geom_line(aes(group=grp))+
-  theme_fira()+
-  facet_wrap(~ID+species)+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        legend.title = element_text(size = rel(1.5), face = "bold"),
-        plot.title = element_text(size=30, face="bold.italic",hjust = 0.5))+
-  ggtitle("O2 curves before cleaning")
-```
-
-## 1° Data cleaning
-
-During a light incubation of any photosynthetic organisms, $O_{2}$ progressively increase with time if photosynthesis occurs. However, for some reasons we can sometimes see outliers in the $O_{2}$ measurement. Theses outliers need to be remove before any analysis. This is the purpose of this 1st step.
-
-Here are plotted the raw $O_{2}$ measurements after removal of the outliers. We removed : 1) complete graphs when values are way too high &/or variable, 2) all values after 30min of incubations, 3) the first 5mins of incubation, 4) ponctual measurement not following the general trend of a graph.
-
-```{r O2 cleaning,echo=FALSE,warning=FALSE,fig.width=15,fig.height=15}
-
-# A) Remove complete graph when values are way too high & variable
-Weird_graphs<-O2_raw_1 %>%
-  filter(ID==140 & week=="Week3" 
-         |ID==54 & week=="Week2" 
-         |ID==68 & week=="Week2" 
-         |ID==73 & week=="Week3"
-         |ID==52 & week=="Week2")
-
-O2_raw_1 <- anti_join(O2_raw_1,
-                            Weird_graphs, by = c("ID","week"))
-rm(Weird_graphs)
-
-# B) Remove all values after 30min of incubations
-O2_raw_1 <- subset(O2_raw_1, dt<=1800)
-
-# C) Remove the first 5 mins of incubation for each incubation
-O2_raw_1 <- subset(O2_raw_1, dt>=300)
-
-# D) Point by point: Remove each point not following the general trend
-Weird_values<-O2_raw_1 %>%
-  filter(ID==138 & week=="Week3" & dt<=180.00
-    |ID==138 & week=="Week3" & dt>=660 & dt<=960 
-    |ID==138 & week=="Week3" & dt>=1140 & dt<=1440
-    |ID==139 & week=="Week3" & dt<=60
-    |ID==139 & week=="Week3" & dt>=240 & dt<=780
-    |ID==142 & week=="TF" & dt>=1680
-    |ID==18 & week=="Week4" & dt>=1260
-    |ID==36 & week=="Week4" & dt>=1260
-    |ID==26 & week=="Week4" & dt>=1500 & dt<=1620
-    |ID==28 & week=="Week4" & dt>=1500 & dt<=1620
-    |ID==28 & week=="TF" & dt>=600 & dt<=660
-    |ID==28 & week=="TF" & dt>=1320 & dt<=1380
-    |ID==68 & week=="TF" & dt<=120
-    |ID==7 & week=="Week1" & dt<=120
-    |ID==76 & week=="Week3" & dt>=600 & dt<=780
-    |ID==76 & week=="Week3" & dt>=1080 & dt<=1260
-    |ID==77 & week=="Week3" & dt>=0 & dt<=240
-    |ID==78 & week=="Week3" & dt>=1740
-    |ID==8 & week=="T0" & dt<= 180
-    |ID==81 & week=="Week3" & dt>=1440 & dt<=1500
-    |ID==81 & week=="Week3" & dt>=1620
-    |ID==82 & week=="Week3" & dt>=1680
-    |ID==86 & week=="TF" & dt<=120
-    |ID==89 & week=="Week3" & dt<=120
-    |ID==90 & week=="Week2" & dt>=60 & dt<=120
-    |ID==93 & week=="Week2" & dt<=240
-    |ID==93 & week=="Week2" & dt>=1560
-    |ID==93 & week=="Week2" & dt>=600 & dt<=720
-    |ID==94 & week=="Week2" & dt<=240
-    |ID==94 & week=="Week2" & dt>=1560
-    |ID==94 & week=="Week2" & dt>=600 & dt<=720
-    |ID==93 & week=="Week5" & dt<=60
-    |ID==93 & week=="Week5" & dt>=300 & dt<=540
-    |ID==93 & week=="Week5" & dt>=1500
-    |ID==94 & week=="Week5" & dt<=60
-    |ID==94 & week=="Week5" & dt>=300 & dt<=540
-    |ID==94 & week=="Week5" & dt>=1500)
-
-O2_raw_1 <- anti_join(O2_raw_1,
-                            Weird_values, by = "dt")
-rm(Weird_values)
-# graph O2 concentration with time for each ID
-ggplot(O2_raw_1,aes(dt,O2))+
-  geom_point(aes(group=grp,color=week))+
-  geom_line(aes(group=grp))+
-  theme_fira()+
-  facet_wrap(~ID+species)+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        legend.title = element_text(size = rel(3.5), face = "bold"),
-        plot.title = element_text(size=30, face="bold.italic",hjust = 0.5),
-        legend.key.size = unit(1, 'cm'), #change legend key size
-        legend.key.height = unit(1, 'cm'), #change legend key height
-        legend.key.width = unit(1, 'cm'), #change legend key width 
-        legend.text = element_text(size=10))+
-  scale_fill_discrete(limits = c("T0","Week 1","Week 2","Week 3","Week 4","Week 5","TF"))+#change legend text font size+
-  ggtitle("O2 curves after cleaning")
-
-```
-
-A second step  is to check the temperature measurements during the incubation. Indeed the temperature influences the O2 calculation. Therefore, it is important to verify that the values of the temperatures used in the calculation do not seem aberrant.
-
-```{r Temperature cleaning,echo=FALSE,warning=FALSE,fig.width=15,fig.height=15}
-ggplot(O2_raw_1,aes(dt,Temp))+
-  geom_point(aes(group=grp,color=week))+
-  geom_line(aes(group=grp))+
-  theme_fira()+
-  facet_wrap(~ID+species)+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        legend.title = element_text(size = rel(1.5), face = "bold"),
-        plot.title = element_text(size=30, face="bold.italic",hjust = 0.5))+
-  ggtitle("Temperature during incubation")
-```
-
-The temperature data look good. We don't have to remove any outliers.
-
-## 2° Model & slopes calculation
-
-The second step is to calculate the slope of $O_{2}$ from T0 to TF based on a linear model to obtain the $\Delta(O_{2}$).
-
-```{r Model,echo=FALSE,warning=FALSE,results=FALSE,fig.show='hide'}
-LM<- O2_raw_1 %>%
-  group_by(grp) %>%
-  do(broom::tidy(lm(O2~dt, .)))
-
-LM<-LM[LM$term=="dt",]
-O2_raw <- merge(O2_raw_1, LM, by = 'grp')
-O2_raw <- O2_raw %>% distinct(estimate, .keep_all = TRUE)
-
-# graph O2 with model per grp
-ggplot(O2_raw_1,aes(dt,O2))+
-  geom_point(aes(group=grp),color="grey60")+
-  geom_line(aes(group=grp))+
-  geom_smooth(aes(group=grp),method="lm",formula="y ~ x")+
-  stat_regline_equation() +
-  theme_minimal()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        legend.title = element_text(size = rel(1.5), face = "bold"))+
-  facet_wrap(ID~week)
-
-O2_raw_1_93<-O2_raw_1[O2_raw_1$ID=="93",]
-O2_raw_1_93<-O2_raw_1_93[O2_raw_1_93$week=="Week2",]
-ggplot(O2_raw_1_93,aes(dt,O2))+
-  geom_point(aes(group=grp),color="grey60")+
-  geom_line(aes(group=grp))+
-  geom_smooth(aes(group=grp),method="lm",formula="y ~ x")+
-  stat_regline_equation() +
-  theme_minimal()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        legend.title = element_text(size = rel(1.5), face = "bold"))
-
-```
-
-## 3° Normalization <br>
-
-The third step is to normalize the $O_{2}$(µmol.L) rate with the biomass of the individual.
-
-$$
-normalizedO_{2} (umol.g(dw)^-.^1min^-.^1) =  \frac{O_{2} (umol/L.min) * V(L)} {Biomass (g)}
-$$ <br> with V = Volume of the chamber, in L (V=30L in our case) <br>
-
-In our case we used the dry weight (g). Each individual has been weighted before each incubation. We use a regression relation between the wet & the dry weight to calculate the dry weight from the wet one at each incubation time.
-
-## 4° O2 Results <br>
-
-```{r Normalization & O2 results, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
-
-# Data manipulation ####
-# Pull PAR & O2 measurements
-# PAR in umol photons m-2 s-1. 
-O2_raw_1$DateTime<-paste(O2_raw_1$date,O2_raw_1$time) # create 1 column DateTime
-O2_raw_1$DateTime<-as_datetime(O2_raw_1$DateTime)
-O2_raw_1$DateTime_rounded<-lubridate::round_date(
-  O2_raw_1$DateTime,
-  unit = "10 min") # approximate the time to within 10min
-O2<- merge(O2_raw_1, PAR_export, by = "DateTime_rounded") # merge O2 & PAR data
-O2$PAR<-0
-O2$PAR[O2$condition == "T0"] <- O2$C0[O2$condition == "T0"]
-O2$PAR[O2$condition == "C0"] <- O2$C0[O2$condition == "C0"]
-O2$PAR[O2$condition == "C1"] <- O2$C1[O2$condition == "C1"]
-O2$PAR[O2$condition == "C2"] <- O2$C2[O2$condition == "C2"]
-O2$PAR[O2$condition == "C3"] <- O2$C3[O2$condition == "C3"]
-
-#Calculate the dry weight using a regression formula 
-# SL
-SL<-O2_raw[O2_raw$species=="SL",]
-SL$Dry_weight<-(SL$wet_weight*0.1664)+0.1548
-# AE
-AE<-O2_raw[O2_raw$species=="AE",]
-AE$Dry_weight<-(AE$wet_weight*0.2614)-3.1997
-# LD
-LD<-O2_raw[O2_raw$species=="LD",]
-LD$Dry_weight<-(LD$wet_weight*0.1359)+6.8917
-
-O2_raw<-rbind(SL,AE,LD)
-rm(SL,AE,LD)
-
-#O2_PAR<-O2 %>%
-#  select(grp,condition,replicate,mesocosm,species,week,Dry_weight,ID,PAR,O2) %>%
-#  group_by(grp,condition,replicate,mesocosm,species,week,Dry_weight,ID)%>%
-#  summarise(PAR = mean(PAR)/(length(PAR)*10*60)) #mean of PAR (within the incubation) and PAR converted in seconds
-
-#O2_PAR<-O2 %>%
-#  select(grp,condition,replicate,mesocosm,species,week,ID,PAR,O2) %>%
-#  group_by(grp,condition,replicate,mesocosm,species,week,ID)%>%
-#  summarise(PAR = sum(PAR)*60/(length(PAR))*10^-3) #Mean PAR received per min in umol photons m-2.min-1
-
-#->O2_PAR$PAR 
-# On ne divise pas par le PAR car Pi curves ne montrent pas un effet de la lumière
-
-
-# Remove the Blank (= control incubation with only seawater in the chamber)
-O2 <- O2[O2$species!="Blank",]
-# Do the mean of the O2 rate per incubation
-O2_mean<-O2_raw %>%
-  select(grp,condition,replicate,mesocosm,species,week,Dry_weight,ID,estimate,std.error,Salinity) %>%
-  group_by(grp,condition,replicate,mesocosm,species,week,Dry_weight,ID,Salinity)%>%
-  summarise(estimate = mean(estimate))
-Std_O2_mean<-O2_raw %>%
-  select(grp,condition,replicate,mesocosm,species,week,Dry_weight,ID,estimate,std.error,Salinity) %>%
-  group_by(grp,condition,replicate,mesocosm,species,week,Dry_weight,ID,Salinity)%>%
-  summarise(std.error = mean(std.error))
-# Do the mean of T° per incubation
-#Temp<-O2 %>%
-#  select(grp,condition,replicate,mesocosm,species,week,ID,Salinity,Temp) %>%
-#  group_by(grp,condition,replicate,mesocosm,species,week,ID,Salinity)%>%
-#  summarise(Temp = mean(Temp))
-
-O2<-merge(O2_mean,Std_O2_mean,by=c("grp","condition","replicate","species","mesocosm","Dry_weight","ID","Salinity","week"))
-
-#O2_PAR<-drop_na(O2_PAR)
-#O2_raw$PAR<-O2_PAR$PAR
-#O2<-O2_raw
-#rm(O2_mean,O2_raw,O2_raw_1,PAR_export,LM)
-
-# Divide O2 by the dry weight (*0.001 to convert it in kg) and multiply it by the volume of the chamber (V=30L)
-# Rq : To do so, we separate the dataframe per weeks to avoid mixing data (which happens without doing this)
-# Rq 2 : the std of the LM is subject to the same calculation
-
-T0 <- O2[O2$week=="T0",]
-T0$O2_normalized<-T0$estimate*30/T0$Dry_weight
-T0$variance<-T0$std.error^2
-T0$variance<-T0$variance*30/T0$Dry_weight
-T0$std_normalized<-sqrt(T0$variance)
-
-Week1 <- O2[O2$week=="Week1",]
-Week1$O2_normalized<-Week1$estimate*30/Week1$Dry_weight
-Week1$variance<-Week1$std.error^2
-Week1$variance<-Week1$variance*30/Week1$Dry_weight
-Week1$std_normalized<-sqrt(Week1$variance)
-
-Week2 <- O2[O2$week=="Week2",]
-Week2$O2_normalized<-Week2$estimate*30/Week2$Dry_weight
-Week2$variance<-Week2$std.error^2
-Week2$variance<-Week2$variance*30/Week2$Dry_weight
-Week2$std_normalized<-sqrt(Week2$variance)
-
-Week3 <- O2[O2$week=="Week3",]
-Week3$O2_normalized<-Week3$estimate*30/Week3$Dry_weight
-Week3$variance<-Week3$std.error^2
-Week3$variance<-Week3$variance*30/Week3$Dry_weight
-Week3$std_normalized<-sqrt(Week3$variance)
-
-Week4 <- O2[O2$week=="Week4",]
-Week4$O2_normalized<-Week4$estimate*30/Week4$Dry_weight
-Week4$variance<-Week4$std.error^2
-Week4$variance<-Week4$variance*30/Week4$Dry_weight
-Week4$std_normalized<-sqrt(Week4$variance)
-
-Week5 <- O2[O2$week=="Week5",]
-Week5$O2_normalized<-Week5$estimate*30/Week5$Dry_weight
-Week5$variance<-Week5$std.error^2
-Week5$variance<-Week5$variance*30/Week5$Dry_weight
-Week5$std_normalized<-sqrt(Week5$variance)
-
-TF <- O2[O2$week=="TF",]
-TF$O2_normalized<-TF$estimate*30/TF$Dry_weight
-TF$variance<-TF$std.error^2
-TF$variance<-TF$variance*30/TF$Dry_weight
-TF$std_normalized<-sqrt(TF$variance)
-
-O2<-rbind(T0, Week1, Week2, Week3, Week4, Week5, TF)
-rm(T0, Week1, Week2, Week3, Week4, Week5, TF)
-
-# Normalize the O2 rate with PAR
-#O2$O2_normalized_PAR=O2$O2_normalized/O2$PAR
-#O2$variance_2<-O2$std_normalized^2
-#O2$variance<-O2$variance/O2$PAR
-#O2$std_normalized_2<-sqrt(O2$variance)
-
-# Define the order of apparition the x axis
-O2$condition <- fct_relevel(O2$condition, c("T0", "C0","C1","C2","C3"))
-
-# Divide the dataframe in 3 (1 for each species)
-Alaria<-O2[O2$species=="AE",]
-Laminaria<-O2[O2$species=="LD",]
-Saccharina<-O2[O2$species=="SL",]
-
-# For each new data frame: duplicate the rows corresponding to T0 incubation into incorporate the T0 values in each facet (cf- ggplot below)
-# Alaria
-Alaria_w2<-Alaria[rep(c(1:5),),]
-Alaria_w2$Graph<-"Week2"
-Alaria_w5<-Alaria[rep(c(1:5),),]
-Alaria_w5$Graph<-"Week5"
-Alaria_TF<-Alaria[rep(c(1:5),),]
-Alaria_TF$Graph<-"TF"
-Alaria<-Alaria[Alaria$week!="T0",]
-Alaria$Graph<-Alaria$week
-Alaria<-rbind(Alaria,Alaria_w2,Alaria_w5,Alaria_TF)
-rm(Alaria_w2,Alaria_w5,Alaria_TF)
-# Laminaria
-Laminaria_w3<-Laminaria[rep(c(1:5),),]
-Laminaria_w3$Graph<-"Week3"
-Laminaria_TF<-Laminaria[rep(c(1:5),),]
-Laminaria_TF$Graph<-"TF"
-Laminaria<-Laminaria[Laminaria$week!="T0",]
-Laminaria$Graph<-Laminaria$week
-Laminaria<-rbind(Laminaria,Laminaria_w3,Laminaria_TF)
-rm(Laminaria_w3,Laminaria_TF)
-# Saccharina
-Saccharina_w1<-Saccharina[rep(c(1:5),),]
-Saccharina_w1$Graph<-"Week1"
-Saccharina_w4<-Saccharina[rep(c(1:5),),]
-Saccharina_w4$Graph<-"Week4"
-Saccharina_TF<-Saccharina[rep(c(1:5),),]
-Saccharina_TF$Graph<-"TF"
-Saccharina<-Saccharina[Saccharina$week!="T0",]
-Saccharina$Graph<-Saccharina$week
-Saccharina<-rbind(Saccharina,Saccharina_w1, Saccharina_w4, Saccharina_TF)
-rm(Saccharina_w1, Saccharina_w4, Saccharina_TF)
-# Create a condition_week column
-Alaria$condition_week<-paste(Alaria$condition,Alaria$week,sep="_")
-Laminaria$condition_week<-paste(Laminaria$condition,Laminaria$week,sep="_")
-Saccharina$condition_week<-paste(Saccharina$condition,Saccharina$week,sep="_")
-
-# Define the order of apparition on the facet
-Alaria$condition_week <- fct_relevel(Alaria$condition_week, c("T0_T0", "C0_Week2","C0_Week5","C0_TF","C1_Week2","C1_Week5","C1_TF","C2_Week2","C2_Week5","C2_TF","C3_Week2","C3_Week5","C3_TF"))
-Laminaria$condition_week <- fct_relevel(Laminaria$condition_week, c("T0_T0", "C0_Week3","C0_TF","C1_Week3","C1_TF","C2_Week3","C2_TF","C3_Week3","C3_TF"))
-Saccharina$condition_week <- fct_relevel(Saccharina$condition_week, c("T0_T0", "C0_Week1","C0_Week4","C0_TF","C1_Week1","C1_Week4","C1_TF","C2_Week1","C2_Week4","C2_TF","C3_Week1","C3_Week4","C3_TF"))
-
-# Plot ####
-# New color
-
-# AE
-AE_plot<-ggplot(Alaria,aes(y=O2_normalized,x=condition_week,colour=condition))+
-  geom_point(size=3)+ 
-  geom_errorbar(aes(ymin=O2_normalized-std_normalized, ymax=O2_normalized+std_normalized), width=.2,position=position_dodge(0.05))+
-  scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote('µmol O2'(min^-1,FW^-1)))+
-  xlab(bquote('conditions'))+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold", hjust=0.5),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.022),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","Week 2", "Week 5","TF","Week 2", "Week 5","TF","Week 2", "Week 5","TF","Week 2", "Week 5","TF"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 4.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 4.5, xmax = 7.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 7.5, xmax = 10.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 10.5, xmax = 13.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("text", x = 3 + 3*(0:3), y = 0.01, label = c("C0","C1","C2","C3"), size = 4.5)+labs(caption = "AE")
-
-# LD
-LD_plot<-ggplot(Laminaria,aes(y=O2_normalized,x=condition_week,colour=condition))+
-  geom_point(size=3)+ 
-  geom_errorbar(aes(ymin=O2_normalized-std_normalized, ymax=O2_normalized+std_normalized), width=.2,position=position_dodge(0.05))+
-  scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote('µmol O2'(min^-1,FW^-1)))+
-  xlab("conditions")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold", hjust=0.5),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.022),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","Week 3","TF","Week 3","TF","Week 3","TF","Week 3","TF"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 3.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 3.5, xmax = 5.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 5.5, xmax = 7.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 7.5, xmax = 9.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("text", x = 2.5 + 2*(0:3), y =  0.01, label = c("C0","C1","C2","C3"), size = 4.5)+labs(caption = "LD")
-
-
-# SL
-SL_plot<-ggplot(Saccharina,aes(y=O2_normalized,x=condition_week,colour=condition))+
-  geom_point(size=3)+ 
-  geom_errorbar(aes(ymin=O2_normalized-std_normalized, ymax=O2_normalized+std_normalized), width=.2,position=position_dodge(0.05))+
-  scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote('µmol O2'(min^-1,FW^-1)))+
-  xlab("conditions")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold", hjust=0.5),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.022),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","Week 1", "Week 4","TF","Week 1", "Week 4","TF","Week 1", "Week 4","TF","Week 1", "Week 4","TF"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 4.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 4.5, xmax = 7.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 7.5, xmax = 10.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 10.5, xmax = 13.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("text", x = 3 + 3*(0:3), y = 0.015, label = c("C0","C1","C2","C3"), size = 4.5)+
-  labs(caption = "SL")
-  
-
-figure <- ggarrange(AE_plot, SL_plot, LD_plot,
-                    labels = c("AE", "SL", "LD"),
-                    ncol = 1, nrow = 3,legend = NULL)
-figure
-
-
-#
-Alaria$week_condition <- fct_relevel(Alaria$condition_week, c("T0_T0", "C0_Week2","C1_Week2","C2_Week2","C3_Week2","C0_Week5","C1_Week5","C2_Week5","C3_Week5","C0_TF","C1_TF","C2_TF","C3_TF"))
-Laminaria$week_condition <- fct_relevel(Laminaria$condition_week, c("T0_T0", "C0_Week3","C1_Week3","C2_Week3","C3_Week3","C0_TF","C1_TF","C2_TF","C3_TF"))
-Saccharina$week_condition <- fct_relevel(Saccharina$condition_week, c("T0_T0", "C0_Week1","C1_Week1","C2_Week1","C3_Week1","C0_Week4","C1_Week4","C2_Week4","C3_Week4","C0_TF","C1_TF","C2_TF","C3_TF"))
-
-# Plot 2 #####
-AE_plot<-ggplot(Alaria,aes(y=O2_normalized,x=week_condition,colour=condition))+
-  geom_point(size=3)+ 
-  geom_errorbar(aes(ymin=O2_normalized-std_normalized, ymax=O2_normalized+std_normalized), width=.2,position=position_dodge(0.05))+
-  scale_colour_manual(values=c("#747676","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote('µmol O2'(min^-1,FW^-1)))+
-  xlab(bquote('conditions'))+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold", hjust=0.5),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.022),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","C0", "C1","C2","C3","C0", "C1","C2","C3","C0", "C1","C2","C3"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 5.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 5.5, xmax = 9.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 9.5, xmax = 13.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("text", x = 3.5 + 4*(0:2), y = 0.01, label = c("Week2","Week5","TF"), size = 6)+labs(caption = "AE")
-
-# LD
-LD_plot<-ggplot(Laminaria,aes(y=O2_normalized,x=week_condition,colour=condition))+
-  geom_point(size=3)+ 
-  geom_errorbar(aes(ymin=O2_normalized-std_normalized, ymax=O2_normalized+std_normalized), width=.2,position=position_dodge(0.05))+
-  scale_colour_manual(values=c("#747676","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote('µmol O2'(min^-1,FW^-1)))+
-  xlab("conditions")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold", hjust=0.5),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.022),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","C0", "C1","C2","C3","C0", "C1","C2","C3"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 5.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 5.5, xmax = 9.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("text", x = 3.5 + 4*(0:1), y =  0.015, label = c("Week3","TF"), size = 6)+labs(caption = "LD")
-
-
-# SL
-SL_plot<-ggplot(Saccharina,aes(y=O2_normalized,x=week_condition,colour=condition))+
-  geom_point(size=3)+ 
-  geom_errorbar(aes(ymin=O2_normalized-std_normalized, ymax=O2_normalized+std_normalized), width=.2,position=position_dodge(0.05))+
-  scale_colour_manual(values=c("#747676","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote('µmol O2'(min^-1,FW^-1)))+
-  xlab("conditions")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold", hjust=0.5),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.022),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","C0", "C1","C2","C3","C0", "C1","C2","C3","C0", "C1","C2","C3"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 5.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("rect", xmin = 5.5, xmax = 9.5, ymin = -0.01, ymax = 0.022, alpha = .1)+
-  annotate("rect", xmin = 9.5, xmax = 13.5, ymin = -0.01, ymax = 0.022, alpha = .4)+
-  annotate("text", x = 3.5 + 4*(0:2), y = 0.015, label = c("Week1","Week4","TF"), size = 6)+labs(caption = "SL")
-  
-
-# Statistics ####
-#Robert : "What ultimately is it that you are wanting to test? If it is the difference in photosynthetic rates under different treatments and PAR conditions, then my first advice is to just use a normal ANOVA (`aov()` function in R). No need for the linear mixed models. To do so you must first convert the PAR values from continuous (numeric) to discrete (categorical). The `cut()` function is useful for converting numeric values into a predefined number of categories. Once your PAR values have been set to discrete levels, you should be able to run `aov(O2_normalized ~ condition*PAR*week, data = Alaria)` to get the stats you want. You can use `TukeyHSD()` on the output of that to get the case by case comparisons".
-
-Alaria$PAR<-cut(Alaria$PAR,breaks=3)
-Anova_Alaria_O2<-aov(O2_normalized ~ condition*PAR*week, data = Alaria)
-TukeyHSD(Anova_Alaria_O2)
-# p-value < 0.05 ? 
-# C3:Week5-C1:TF (p=0.0387630)
-
-Saccharina$PAR<-cut(Saccharina$PAR,breaks=3)
-Anova_Saccharina_O2<-aov(O2_normalized ~ condition*PAR*week, data = Saccharina)
-TukeyHSD(Anova_Saccharina_O2)
-
-# p-value < 0.05 ? 
-# Entre C3 et T0 (p=0418936)
-
-Laminaria$PAR<-cut(Laminaria$PAR,breaks=3)
-Anova_Laminaria_O2<-aov(O2_normalized ~ condition*PAR*week, data = Laminaria)
-TukeyHSD(Anova_Laminaria_O2)
-# p-value < 0.05 ? NEVER
-
-## Statistics - old Version ####
-# We want to compare each measurements of O2 synthesis mean between : conditions, replicates, species, weeks
-# To do so we can use a linear mixed-effects model
-# We can test 2 different models :
-# the first one (HLM_O2) include the factor time (week) as a fixed factor i.e. a factor we wanna test
-
-#Alaria<-Alaria[,-16]
-#Alaria<-Alaria %>% distinct()
-
-Alaria_stat_O2<-lmer(O2_normalized ~ week*condition + (1|replicate), data=Alaria)
-Anova(Alaria_stat_O2)
-emmeans(Alaria_stat_O2, list(pairwise ~ week*condition), adjust = "tukey")
-
-Laminaria_stat_O2<-lmer(O2_normalized ~ week*condition + (1|replicate), data=Laminaria)
-emmeans(Laminaria_stat_O2, list(pairwise ~ week*condition), adjust = "tukey")
-
-Saccharina_stat_O2<-lmer(O2_normalized ~ week*condition + (1|replicate), data=Saccharina)
-Saccharina_stat_O2<-glm(O2_normalized ~ week*condition, data=Saccharina)
-emmeans(Saccharina_stat_O2, list(pairwise ~ week*condition), adjust = "tukey")
-
-HLM_O2 <- lmer(Alaria ~ species*condition*PAR*week + (1|replicate), data=O2)
-                                #fixed = factor to test + #random= factor not to test but could have an impact
-# the second one (HLM_O2_2) include the factor time (week) also as a random factor i.e. a factor not to test but that could have an impact on the model
-#HLM_O2_2 <- lmer(O2_normalized ~ species*condition*PAR*week + (1|replicate)+(1|week), data=O2)
-# Then we calculate the AIC to choose the best model between these two.
-#AIC(HLM_O2)
-#AIC(HLM_O2_2)
-# The first model (HLM_Table) has the lowest AIC, it's therefore the best model.
-#rm(HLM_O2_2) # remove the 2nd model (the worst one)
-# Let's now do an ANOVA on this model.
-#Anova(HLM_O2)
-# Chisq = F 
-# df
-#df.residual(HLM_O2)
-# df : df, df residual
-# On note : F(df,df residual)
-
-# To localize in between wich group of data are the significant differences (if they are), we do post-hoc test (or multiple comparison test) of Tukey. This test can be used to determine significant differences between group means in an analysis of variance.
-#emmeans(HLM_O2, list(pairwise ~ species*condition*PAR*week), adjust = "tukey")
-
-# In our case, nothing is significative exept :
-# LD T0 & LD C0 TF
-# LD T0 & LD C2 TF
-# in both cases : 1 individual pull the data (CO & C2 TF)
-```
-
-Observations:<br>
-- The photosynthesis rate of SL does not change between conditions & within time<br>
-- The photosynthesis rate of AE & LD seems maybe less stable within time (increase) but it's not significative & it's pretty similar between the different conditions.
-
-```{r Total O2, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
-### Total within incubation ####
-# First : remove outliers
-O2<-O2[!O2$O2_normalized_PAR>0.1,]
-
-# O2_mean & std calcul
-O2_mean<-O2 %>%
-  select(grp,condition,replicate,mesocosm,species,week,ID,Salinity,Temp,O2_normalized_PAR,std_normalized_2) %>%
-  group_by(condition,species,week)%>%
-  summarise(O2_mean = sum(O2_normalized_PAR)/length(O2_normalized_PAR))
-
-std_O2_mean<-O2 %>%
-  select(grp,condition,replicate,mesocosm,species,week,ID,Salinity,Temp,O2_normalized_PAR,std_normalized_2) %>%
-  group_by(condition,species,week)%>%
-  summarise(std_O2_mean = sqrt(mean((std_normalized_2)^2)))
-
-O2_mean_incubation<-merge(O2_mean,std_O2_mean,by=c("species","condition","week"))
-
-#Division by species
-Alaria_mean<-O2_mean_incubation[O2_mean_incubation$species=="AE",]
-Alaria_mean$condition_week<-paste(Alaria_mean$condition,Alaria_mean$week,sep="_")
-
-Laminaria_mean<-O2_mean_incubation[O2_mean_incubation$species=="LD",]
-Laminaria_mean$condition_week<-paste(Laminaria_mean$condition,Laminaria_mean$week,sep="_")
-
-Saccharina_mean<-O2_mean_incubation[O2_mean_incubation$species=="SL",]
-Saccharina_mean$condition_week<-paste(Saccharina_mean$condition,Saccharina_mean$week,sep="_")
-
-# Define the order of apparition on the facet
-Alaria_mean$condition_week <- fct_relevel(Alaria_mean$condition_week, c("T0_T0", "C0_Week2","C0_Week5","C0_TF","C1_Week2","C1_Week5","C1_TF","C2_Week2","C2_Week5","C2_TF","C3_Week2","C3_Week5","C3_TF"))
-Laminaria$condition_week <- fct_relevel(Laminaria$condition_week, c("T0_T0", "C0_Week3","C0_TF","C1_Week3","C1_TF","C2_Week3","C2_TF","C3_Week3","C3_TF"))
-Saccharina$condition_week <- fct_relevel(Saccharina$condition_week, c("T0_T0", "C0_Week1","C0_Week4","C0_TF","C1_Week1","C1_Week4","C1_TF","C2_Week1","C2_Week4","C2_TF","C3_Week1","C3_Week4","C3_TF"))
-
-
-# AE
-AE_plot_mean<-ggplot()+
-  geom_point(Alaria,mapping=aes(y=O2_normalized_PAR,x=condition_week,colour=condition),size=3,alpha=0.5)+
-  geom_errorbar(Alaria,mapping=aes(y=O2_normalized_PAR,x=condition_week,ymin=O2_normalized_PAR-std_normalized_2, ymax=O2_normalized_PAR+std_normalized_2,colour=condition),width=.2,position=position_dodge(0.05),alpha=0.5)+
-  geom_point(Alaria_mean,mapping=aes(y=O2_mean,x=condition_week),alpha=1,size=3)+
-  geom_errorbar(Alaria_mean,mapping=aes(y=O2_mean,x=condition_week, ymin=O2_mean-std_O2_mean, ymax=O2_mean+std_O2_mean), width=.2,position=position_dodge(0.05),alpha=1)+
-    scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote(bold(O[2] ("µmol O2.gDW-1.min-1.umol photons-1 m-2 min-1"))))+
-  xlab("")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.06),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","Week 2", "Week 5","TF","Week 2", "Week 5","TF","Week 2", "Week 5","TF","Week 2", "Week 5","TF"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 4.5, ymin = -0.01, ymax = 0.06, alpha = .4)+
-  annotate("rect", xmin = 4.5, xmax = 7.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("rect", xmin = 7.5, xmax = 10.5, ymin = -0.01, ymax = 0.06, alpha = .4)+
-  annotate("rect", xmin = 10.5, xmax = 13.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("text", x = 3 + 3*(0:3), y = 0.03, label = c("C0","C1","C2","C3"), size = 4.5)+labs(caption = "AE")
-
-# LD
-LD_plot_mean<-ggplot()+
-  geom_point(Laminaria,mapping=aes(y=O2_normalized_PAR,x=condition_week,colour=condition),size=3,alpha=0.5)+
-  geom_errorbar(Laminaria,mapping=aes(y=O2_normalized_PAR,x=condition_week,ymin=O2_normalized_PAR-std_normalized_2, ymax=O2_normalized_PAR+std_normalized_2,colour=condition),width=.2,position=position_dodge(0.05),alpha=0.5)+
-  geom_point(Laminaria_mean,mapping=aes(y=O2_mean,x=condition_week),alpha=1,size=3)+
-  geom_errorbar(Laminaria_mean,mapping=aes(y=O2_mean,x=condition_week, ymin=O2_mean-std_O2_mean, ymax=O2_mean+std_O2_mean), width=.2,position=position_dodge(0.05),alpha=1)+
-    scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote(bold(O[2] ("µmol O2.gDW-1.min-1.umol photons-1 m-2 min-1"))))+
-  xlab("")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.06),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","Week 3","TF","Week 3","TF","Week 3","TF","Week 3","TF"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 3.5, ymin = -0.01, ymax = 0.06, alpha = .4)+
-  annotate("rect", xmin = 3.5, xmax = 5.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("rect", xmin = 5.5, xmax = 7.5, ymin = -0.01, ymax = 0.06, alpha = .4)+
-  annotate("rect", xmin = 7.5, xmax = 9.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("text", x = 2.5 + 2*(0:3), y =  0.03, label = c("C0","C1","C2","C3"), size = 4.5)+labs(caption = "LD")
-
-# SL
-SL_plot_mean<-ggplot()+
-  geom_point(Saccharina,mapping=aes(y=O2_normalized_PAR,x=condition_week,colour=condition),size=3,alpha=0.5)+
-  geom_errorbar(Saccharina,mapping=aes(y=O2_normalized_PAR,x=condition_week,ymin=O2_normalized_PAR-std_normalized_2, ymax=O2_normalized_PAR+std_normalized_2,colour=condition),width=.2,position=position_dodge(0.05),alpha=0.5)+
-  geom_point(Saccharina_mean,mapping=aes(y=O2_mean,x=condition_week),alpha=1,size=3)+
-  geom_errorbar(Saccharina_mean,mapping=aes(y=O2_mean,x=condition_week, ymin=O2_mean-std_O2_mean, ymax=O2_mean+std_O2_mean), width=.2,position=position_dodge(0.05),alpha=1)+
-    scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  ylab(bquote(bold(O[2] ("µmol O2.gDW-1.min-1.umol photons-1 m-2 min-1"))))+
-  xlab("")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.06),expand = expansion(mult = c(0,0)))+
-  scale_x_discrete(labels= c("T0","Week 1", "Week 4","TF","Week 1", "Week 4","TF","Week 1", "Week 4","TF","Week 1", "Week 4","TF"))+
-  annotate("rect", xmin = 0, xmax = 1.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("rect", xmin = 1.5, xmax = 4.5, ymin = -0.01, ymax = 0.06, alpha = .4)+
-  annotate("rect", xmin = 4.5, xmax = 7.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("rect", xmin = 7.5, xmax = 10.5, ymin = -0.01, ymax = 0.06, alpha = .4)+
-  annotate("rect", xmin = 10.5, xmax = 13.5, ymin = -0.01, ymax = 0.06, alpha = .1)+
-  annotate("text", x = 3 + 3*(0:3), y = 0.03, label = c("C0","C1","C2","C3"), size = 4.5)+
-  labs(caption = "SL")
-
-
-### Total within conditions ####
-#O2_mean_condition<-O2 %>%
-#  select(grp,condition,replicate,mesocosm,species,O2_normalized_PAR,std_normalized_2) %>%
-#  group_by(condition,species)%>%
-#  summarise(O2_mean = sum(O2_normalized_PAR)/length(O2_normalized_PAR))
-
-#std_O2_mean_condition<-O2 %>%
-#  select(grp,condition,replicate,mesocosm,species,O2_normalized_PAR,std_normalized_2) %>%
-#  group_by(condition,species)%>%
-#  summarise(std_O2_mean = sqrt(mean((std_normalized_2)^2)))
-#
-#O2_mean_condition<-merge(O2_mean_condition,std_O2_mean_condition,by=c("species","condition"))
-
-
-#Alaria_mean_condition<-O2_mean_condition[O2_mean_condition$species=="AE",]
-#Laminaria_mean_condition<-O2_mean_condition[O2_mean_condition$species=="LD",]
-#Saccharina_mean_condition<-O2_mean_condition[O2_mean_condition$species=="SL",]
-
-
-# Define the order of apparition on the facet
-#Alaria_mean_condition$condition <- fct_relevel(Alaria_mean_condition$condition, c("T0","C1","C2","C3"))
-#Laminaria_mean_condition$condition_week <- fct_relevel(Laminaria_mean_condition$condition, c("T0","C1","C2","C3"))
-#Saccharina_mean_condition$condition_week <- fct_relevel(Saccharina_mean_condition$condition, c("T0","C1","C2","C3"))
-
-# AE
-#AE_plot_total<-ggplot()+
-#  geom_point(Alaria_mean_condition,mapping=aes(y=O2_mean,x=condition,colour=condition),alpha=1,size=3)+
-#  geom_errorbar(Alaria_mean_condition,mapping=aes(y=O2_mean,x=condition, ymin=O2_mean-std_O2_mean, ymax=O2_mean+std_O2_mean), width=.2,position=position_dodge(0.05),alpha=1)+
-#  scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-#  ylab(bquote(bold(O[2] ("µmol O2.gDW-1.min-1.umol photons-1 m-2 min-1"))))+
-#  xlab("")+
-#  theme_fira()+
-#  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-#        axis.text = element_text(size = rel(1.5)),
-#        axis.text.x = element_text(angle = 60,vjust = 0.5),
-#        strip.text.x = element_text(size = rel(1.5),face="bold"),
-#        legend.position="none")+
-#  scale_y_continuous(limits=c(-0.01,0.06),expand = expansion(mult = c(0,0)))+
-#  labs(caption = "AE")
-
-# et un boxplot ? 
-give.n <- function(x){
-   return(c(y = mean(x), label = length(x)))
-}
-
-AE_plot_total<-ggplot()+
-  geom_boxplot(aes(y=O2_normalized_PAR,x=condition,colour=condition),data=Alaria)+
-  scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  stat_summary(aes(y=0.03,x=condition),colour="black",data=Alaria,fun.data = give.n, geom = "text",size=8)+
-  ylab(bquote(bold(O[2] ("µmol O2.gDW-1.min-1.umol photons-1 m-2 min-1"))))+
-  xlab("")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.06),expand = expansion(mult = c(0,0)))+
-  labs(caption = "AE")
-
-LD_plot_total<-ggplot()+
-  geom_boxplot(aes(y=O2_normalized_PAR,x=condition,colour=condition),data=Laminaria)+
-  scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  stat_summary(aes(y=0.03,x=condition),colour="black",data=Laminaria,fun.data = give.n, geom = "text",size=8)+
-  ylab(bquote(bold(O[2] ("µmol O2.gDW-1.min-1.umol photons-1 m-2 min-1"))))+
-  xlab("")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.06),expand = expansion(mult = c(0,0)))+
-  labs(caption = "LD")
-
-Saccharina<-Saccharina[!Saccharina$O2_normalized_PAR>0.1,]
-SL_plot_total<-ggplot()+
-  geom_boxplot(aes(y=O2_normalized_PAR,x=condition,colour=condition),data=Saccharina)+
-  #geom_jitter(aes(y=O2_normalized_PAR,x=condition),data=Saccharina,color="black", size=0.4) +
-  scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
-  stat_summary(aes(y=0.03,x=condition),colour="black",data=Saccharina,fun.data = give.n, geom = "text",size=8)+
-  ylab(bquote(bold(O[2] ("µmol O2.gDW-1.min-1.umol photons-1 m-2 min-1"))))+
-  xlab("")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        strip.text.x = element_text(size = rel(1.5),face="bold"),
-        legend.position="none")+
-  scale_y_continuous(limits=c(-0.01,0.06),expand = expansion(mult = c(0,0)))+
-  labs(caption = "SL")
-
-```
-
-## 6° PI curves : $O_{2}$ vs. PAR <br>
-
-The mesocosm PAR data are used here as a proxi of the actual PAR in the incubation chambers. Same filters have been used on the top of the mesocosm and the chambers (from the same condition). Depending on the hour of the day (i.e. shade/light) we used rather M0, M1 or M2 PAR data whichever best represent the same irradiance received by the chamber.
-
-```{r PAR , echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=6}
-#PAR values are the interpolated values after erroneous values were removed
-#10 min integrated values are averaged (mean) & converted in secs (divided by 10*60).
-
-ggplot(O2,aes(y=O2_normalized,x=PAR,color=species))+
-  geom_point(size=5)+ 
-  facet_wrap(~condition)+
-  labs(y="O2 (µmol.g(dw)-1.min-1)",x="PAR(sec-1)")+
-  scale_colour_viridis_d("Condition")+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
-        axis.text = element_text(size = rel(1.5)),
-        legend.title = element_text(size = rel(1.5), face = "bold"),
-        legend.text = element_text(size = rel(1.5), face = "bold"),
-        legend.key.size = unit(1.5, "lines"),
-        strip.text.x = element_text(size = rel(1.5),face="bold"))
-
-#ggdraw() +
- # draw_plot(plot_1)+
-#  draw_image("/Users/anaislebrun/Desktop/These/Mesocosm experiment/O2/table.png",  x = -0.013, y = -0.25, scale = 0.28)
-
-```
-
-Observation: no shape of PI curves.  <br>
-Explanation: Variations of PAR are too low within incubation too make the photosynthesis rate vary.
-
-
-## 7° Chla <br>
-
-Now let's look at the Chla data at T0 & TF in each condition.
-
+- The condition in orange is C1. It exhibits a +1.76°C and will be renamed as "HT" (for High Temperature) for the rest of the analysis.   
+- The condition in light red is C2. It exhibits a +1.76°C and 1 MHV of 13 days and will be renamed as "1MHV" (for 1 Marine Heatwave) for the rest of the analysis.   
+- The condition in dark red is C3. It exhibits a +1.76°C and 2 MHV of 5 days each and will be renamed as "2MHV" (for 2 Marine Heatwaves) for the rest of the analysis.   
+    
+## 1° Chla <br>   
+   
+Let's look at the chlorophyll a data.   
+The measurements were done on fresh tissues sampled at the beginning (T0) and the end (TF) of the experiment on our 3 kelp species (see above).   
+   
 ```{r Chla , echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
 Chla <- read_excel("/Users/anaislebrun/Desktop/These/Meso Tromso 2022/MHV_Tromso/data/CHLA-Tromso.xlsx", col_types = c("numeric","text","text","text","text","text",  "text","text","text","text", "text","text", "text", "text","numeric", "numeric", "text", "text"))
 
@@ -1023,19 +229,26 @@ ggqqplot(Chla_Laminaria_C3$`Chla (µg.g)`)
 rm(Chla_Laminaria_T0,Chla_Laminaria_C0,Chla_Laminaria_C1,Chla_Laminaria_C2,Chla_Laminaria_C3)
 
 Chla<-rbind(Chla_Saccharina,Chla_Laminaria,Chla_Alaria)
-
+rm(Chla_Saccharina,Chla_Laminaria,Chla_Alaria)
 give.n <- function(x){
    return(c(y = mean(x), label = length(x)))
 }
 
 # PLOTS 
 # Define the order of apparition of the condition (x axis)
-Chla$treatment <- fct_relevel(Chla$treatment, c("T0", "C0","C1","C2","C3"))
+Chla$treatment_renamed <- "C"
+Chla$treatment_renamed[Chla$treatment=="T0"] <- "T0"
+Chla$treatment_renamed[Chla$treatment=="C1"] <- "HT"
+Chla$treatment_renamed[Chla$treatment=="C2"] <- "1MH"
+Chla$treatment_renamed[Chla$treatment=="C3"] <- "2MH"
 
-Chla_plot<-ggplot(Chla,aes(y=`Chla (µg.g)`,x=treatment,fill=treatment))+
+
+Chla$treatment_renamed <- fct_relevel(Chla$treatment_renamed, c("T0", "C","HT","1MH","2MH"))
+
+Chla_plot_no_outlier<-ggplot(Chla,aes(y=`Chla (µg.g)`,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
   theme_fira()+
-  geom_jitter(shape = 21,aes(fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(fill=treatment_renamed),color="black",size=3)+
   facet_wrap(~species,scales='free')+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
   scale_color_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
@@ -1049,14 +262,14 @@ Chla_plot<-ggplot(Chla,aes(y=`Chla (µg.g)`,x=treatment,fill=treatment))+
   xlab(bquote('conditions'))+
   scale_y_continuous(limits = c(0, 110))
 
-jpeg(filename = "figures/Chla/Chla_plot.jpeg",width=950, height=650)
-Chla_plot
+jpeg(filename = "figures/Chla/Chla_plot_no_outlier.jpeg",width=950, height=650)
+Chla_plot_no_outlier
 dev.off()
 
-Pheo_plot<-ggplot(Chla,aes(y=`Pheo (µg.g)`,x=treatment,fill=treatment))+
+Pheo_plot_no_outlier<-ggplot(Chla,aes(y=`Pheo (µg.g)`,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
   theme_fira()+
-  geom_jitter(shape = 21,aes(fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(fill=treatment_renamed),color="black",size=3)+
   facet_wrap(~species,scales='free')+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
   scale_color_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
@@ -1070,12 +283,12 @@ Pheo_plot<-ggplot(Chla,aes(y=`Pheo (µg.g)`,x=treatment,fill=treatment))+
   xlab(bquote('conditions'))+
   scale_y_continuous(limits = c(0, 290))
 
-jpeg(filename = "figures/Chla/Pheo_plot.jpeg",width=950, height=650)
-Pheo_plot
+jpeg(filename = "figures/Chla/Pheo_plot_no_outlier.jpeg",width=950, height=650)
+Pheo_plot_no_outlier
 dev.off()
 
-jpeg(filename = "figures/Chla/Chla_Pheo_plots.jpeg",width=950, height=1300)
-ggarrange(Chla_plot,Pheo_plot,
+jpeg(filename = "figures/Chla/Chla_Pheo_plots_no_outlier.jpeg",width=950, height=1300)
+ggarrange(Chla_plot_no_outlier,Pheo_plot_no_outlier,
           ncol = 1, nrow = 2,common.legend = TRUE)
 dev.off()
 # Statistics ####
@@ -1084,13 +297,13 @@ TukeyHSD(Anova_Chla)
 # p-value < 0.05 :
 # All species combined: 
 #           diff        lwr        upr     p adj
-#C3-T0 -35.0535233 -53.26311 -16.8439369 0.0000069
+#2MHV-T0 -35.0535233 -53.26311 -16.8439369 0.0000069 
 #C3-C1 -24.1152426 -44.27651  -3.9539704 0.0108818
 
 #AE:
 #                   diff        lwr        upr     p adj
-#C3:AE-T0:AE -49.34868666 -87.938717 -10.7586568 0.0021466
-#C3:AE-C2:AE -34.37548857 -77.520454   8.7694764 0.2754528
+#2MH:AE-T0:AE -49.34868666 -87.938717 -10.7586568 0.0021466
+#2MH:AE-1MH:AE -34.37548857 -77.520454   8.7694764 0.2754528
 
 
 #SL
@@ -1099,9 +312,126 @@ TukeyHSD(Anova_Chla)
 
 #LD : no significative difference
 
+############ HERE ############
+# Is there a link between Chl a content & the age of the algae ? Size of an individual is a proxy of its age. Let's see if we find a link between Chla & frond lenght.
+library(nlme)
+library(ggu.base.fun)
+# log transformation is necessary to look into a LINEAR model here
+# It allows the residuals to be normaly distributed (see later)
+#Growth_normalized$lg_growth_rate<-log(Growth_normalized$Growth_rate)
+#Growth_normalized$lg_total_lenght<-log(Growth_normalized$`Total lenght (cm)`)
+
+Kelp_ID <- read_excel("data/Kelp_ID.xlsx", 
+     col_types = c("numeric", "text", "numeric", 
+         "text", "text", "numeric", "numeric", 
+         "numeric", "text", "text", "text"))
+Chla_normalized<-merge(Kelp_ID,Chla,by="ID")
+Chla_normalized <- Chla_normalized %>%
+  rename(total_lenght = `Total lenght (cm)`,
+         Chla=`Chla (µg.g)`)
+
+Chla_normalized <- Chla_normalized[!is.infinite(Chla_normalized$total_lenght),]
+Chla_normalized <- Chla_normalized[!is.na(Chla_normalized$total_lenght),] 
+Chla_normalized <- Chla_normalized[!is.infinite(Chla_normalized$Chla),]#remove inf values
+Chla_normalized <- Chla_normalized[!is.na(Chla_normalized$Chla),] # remove NA 
+########### HERE ############
+#Chla_normalized$log_chla<-log(Chla_normalized$`Chla (µg.g)`)
+#Chla_normalized$log_total_lenght<-log(Chla_normalized$total_lenght)
+
+boxcox <- boxCox(na.omit(Chla_normalized$Chla) ~ na.omit(Chla_normalized$total_lenght), lambda = seq(-5,5,0.1))
+lambda <- boxcox$x[which.max(boxcox$y)]
+Chla_normalized$chla_bc <- if (lambda != 0) {
+  (Chla_normalized$Chla^lambda - 1) / lambda
+} else {
+  log(Chla_normalized$Chla)
+}
+
+is.numeric(Chla_normalized$chla_bc)
+
+length_lm <- lm(log(Chla_normalized$chla_bc) ~ log(Chla_normalized$total_lenght), data=Chla_normalized)
+plot(log(Chla_normalized$chla_bc) ~ log(Chla_normalized$total_lenght), data=Chla_normalized)
+abline(length_lm)
+summary(length_lm)
+legend("topleft", legend=paste("R2 is", format(summary(length_lm)$r.squared,digits=3)))
+
+Chla_normalized$Normalized_Chla <- if (lambda != 0) {
+  (Chla_normalized$chla_bc * lambda + 1)^(1/lambda)
+} else {
+  exp(Chla_normalized$chla_bc)
+}
+
+
+Normalized_Chla_plot_no_outlier<-ggplot(Chla_normalized,aes(y=Normalized_Chla,x=treatment_renamed,fill=treatment_renamed))+
+  geom_boxplot(outlier.alpha = 0)+
+  theme_fira()+
+  geom_jitter(shape = 21,aes(fill=treatment_renamed),color="black",size=3)+
+  facet_wrap(~species,scales='free')+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0),colour="black",data=Chla_normalized,fun.data = give.n, geom = "text",size=8)+
+  theme(axis.title = element_text(size = rel(1.5), face = "bold", hjust=0.5),
+        axis.text = element_text(size = rel(1.5)),
+        strip.text.x = element_text(size = rel(1.5),face="bold"),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  ylab(bquote('Chl a '(µg.FW^-1)))+
+  xlab(bquote('conditions'))
+
+length_lm <- lm(log_chla ~ log_total_lenght,data=Chla_normalized)
+plot(log_chla ~ log_total_lenght,data=Chla_normalized)
+abline(length_lm)
+summary(length_lm)
+legend("topleft",legend=paste("R2 is", format(summary(length_lm)$r.squared,digits=3)))
+# equation : log(y)=7.4271- 0.8496*log(total_lenght) + 0.5981
+Chla_normalized$Normalized_Chla<-10^(7.4271-0.8496*Chla_normalized$log_total_lenght+0.5981)
+
+# normality of standardized model residuals
+length_lm_std <- residuals(length_lm, type="pearson")
+shapiro.test(length_lm_std) #p-value = 0.6689, normality verified
+qqnorm(length_lm_std)
+qqline(length_lm_std)
+hist(length_lm_std, xlab="standardized residuals")
+
+library(car)
+# homogeneity of model variances
+leveneTest(length_lm_std , group = Chla_normalized$log_chla) # NaN
+leveneTest(length_lm_std , group = Chla_normalized$log_total_lenght) # Homogeneity verified
+
+Normalized_Chla_plot_no_outlier<-ggplot(Chla_normalized,aes(y=Normalized_Chla,x=treatment_renamed,fill=treatment_renamed))+
+  geom_boxplot(outlier.alpha = 0)+
+  theme_fira()+
+  geom_jitter(shape = 21,aes(fill=treatment_renamed),color="black",size=3)+
+  facet_wrap(~species,scales='free')+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0),colour="black",data=Chla_normalized,fun.data = give.n, geom = "text",size=8)+
+  theme(axis.title = element_text(size = rel(1.5), face = "bold", hjust=0.5),
+        axis.text = element_text(size = rel(1.5)),
+        strip.text.x = element_text(size = rel(1.5),face="bold"),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  ylab(bquote('Chl a '(µg.FW^-1)))+
+  xlab(bquote('conditions'))#+
+  #scale_y_continuous(limits = c(0, 110))
+
+### ANOVA for the final model
+anova(length_lm)
+#Analysis of Variance Table
+#Response: lg_growth_rate
+#                 Df  Sum Sq Mean Sq F value    Pr(>F)    
+#lg_total_lenght   1  32.777  32.777  31.274 1.081e-07 ***
+#Residuals       145 151.971   1.048                      
+#---
+#Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.
+
 ```
 
-## 10° C/N <br>
+Here are the data obtained after removing outliers using the Rosner test.   
+For both AE and SL, a significant decrease in tissue chlorophyll content was observed between T0 and 2MH.   
+Although the difference with the control was not significant, these observations suggest a decrease in chlorophyll content that could be due to both treatment and the life cycle of these two kelps.   
+Therefore, repeated strong MHV could accelerate the decline in chlorophyll content in these two species during the summer period, which could directly impact their photosynthetic capacity. We may be able to see this with the incubation data.  
+    
+## 2° C/N <br>
 
 ```{r C/N, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
 CHN <- read_excel("data/CHN-TROMSO.xlsx", 
@@ -1186,17 +516,21 @@ shapiro.test(CHN_AE_C2$C_1mg) # Normal
 # SL C0
 rosnerTest(CHN_SL_C0$N_1mg, k = 1)$all.stats # no outlier
 
+rm(CHN_AE,CHN_AE_C0,CHN_AE_C2,CHN_AE_C3,CHN_LD,CHN_LD_C2,CHN_LD_C3,CHN_SL,CHN_SL_C0,CHN_SL_C2,CHN_SL_T0)
+
 give.n <- function(x){
    return(c(y = mean(x), label = length(x)))
 }
   
+CHN$treatment_renamed <- fct_relevel(CHN$treatment_renamed, c("T0", "C","HT","1MH","2MH"))
+
 #boxplot C/N
-CN<-ggplot(CHN,aes(y=`C/N`,x=treatment,fill=treatment))+
+CN_no_outlier<-ggplot(CHN,aes(y=`C/N`,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(fill=treatment_renamed),color="black",size=3)+
   facet_wrap(~species)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=10,x=treatment),colour="black",data=CHN,fun.data = give.n, geom = "text",size=10)+
+  stat_summary(aes(y=10,x=treatment_renamed),colour="black",data=CHN,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1207,13 +541,13 @@ CN<-ggplot(CHN,aes(y=`C/N`,x=treatment,fill=treatment))+
   xlab(bquote('conditions'))
 
 jpeg(filename = "figures/CN/CN.jpeg",width=950, height=650)
-CN
+CN_no_outlier
 dev.off()
 
 #boxplot C
-C<-ggplot(CHN,aes(y=C_1mg,x=treatment,fill=treatment))+
+C_no_outlier<-ggplot(CHN,aes(y=C_1mg,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(fill=treatment_renamed),color="black",size=3)+
   facet_wrap(~species)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
   theme_fira()+
@@ -1225,13 +559,13 @@ C<-ggplot(CHN,aes(y=C_1mg,x=treatment,fill=treatment))+
   ylab(bquote('C'(mg.g^-1,DW)))+
   xlab(bquote('conditions'))
 
-jpeg(filename = "figures/CN/C.jpeg",width=950, height=650)
-C
+jpeg(filename = "figures/CN/C_no_outlier.jpeg",width=950, height=650)
+C_no_outlier
 dev.off()
 #boxplot N
-N<-ggplot(CHN,aes(y=N_1mg,x=treatment,fill=treatment))+
+N_no_outlier<-ggplot(CHN,aes(y=N_1mg,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(fill=treatment_renamed),color="black",size=3)+
   facet_wrap(~species)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
   theme_fira()+
@@ -1243,11 +577,11 @@ N<-ggplot(CHN,aes(y=N_1mg,x=treatment,fill=treatment))+
   ylab(bquote('N'(mg.g^-1,DW)))+
   xlab(bquote('conditions'))
 jpeg(filename = "figures/CN/N.jpeg",width=950, height=650)
-N
+N_no_outlier
 dev.off()
 
-jpeg(filename = "figures/CN/CN_C_N.jpeg",width=950, height=1300)
-ggarrange(CN,C,N,
+jpeg(filename = "figures/CN/CN_C_N_no_outlier.jpeg",width=950, height=1300)
+ggarrange(CN_no_outlier,C_no_outlier,N_no_outlier,
           ncol = 1, nrow = 3,common.legend = TRUE)
 dev.off()
 # Statistics C/N
@@ -1268,8 +602,18 @@ TukeyHSD(Anova_N)
 # No significative difference between treatments within each species
 
 ```
+There was no significant difference observed in the C/N ratio, as well as the C and N content, between the conditions for any of the three species.
 
-## 11° Diving PAM <br>
+## 3° Diving PAM <br>
+```{r install chatpgt, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
+library(chatgpt)
+Sys.setenv(OPENAI_API_KEY = "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")
+ask_chatgpt("J'ai des données de quantum yield dans le dataframe Kelp_Pam le 02/07, 07/07, 11/07, 14/07, 18/07 et 22/07 pour 3 espèces de macroalgues (AE, LD et SL) ayant subis 4 conditions différentes : contrôle (C), high temperature (HT), 1 marine heatwaves (1MH) et 2 marine heatwaves (2MH). et répartis dans 12 mésocosmes différents donnant ainsi un triplicata de chaque conditions : 3 mésocosmes par conditions. Quelles analyse statistiques puis-je faire pour analyser la différence statistique du quantum yield en fonction du temps et des conditions subis par chaque espèce ? Ecris moi le code")
+
+Kelp_Pam(complete_code("Une fonction qui analyse la différence statistique du quantum yiled (Fv/Fm) en fonction du temps et des conditons subis par chaque espèce AE, LD et SL"))
+chatgpt::ask_chatgpt()
+
+```
 
 ```{r PAM, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
 #### KELP ####
@@ -1281,13 +625,21 @@ give.n <- function(x){
    return(c(y = mean(x), label = length(x)))
 }
 
+Kelp_Pam$treatment_renamed <- "C"
+Kelp_Pam$treatment_renamed[Kelp_Pam$treatment=="C1"] <- "HT"
+Kelp_Pam$treatment_renamed[Kelp_Pam$treatment=="C2"] <- "1MH"
+Kelp_Pam$treatment_renamed[Kelp_Pam$treatment=="C3"] <- "2MH"
+Kelp_Pam$treatment_renamed[Kelp_Pam$Sampling=="T0"]<-"T0"
+
+Kelp_Pam$treatment_renamed <- fct_relevel(Kelp_Pam$treatment_renamed, c("T0","C","HT","1MH","2MH"))
+
 # All period merged
-Kelp_Pam_plot<-ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
+ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
   geom_jitter(shape = 21,color="black",size=3)+
   facet_wrap(~species)+
-  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Kelp_Pam,fun.data = give.n, geom = "text",size=10)+
+  scale_fill_manual(values=c("lightgrey","#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment_renamed),colour="black",data=Kelp_Pam,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1297,20 +649,16 @@ Kelp_Pam_plot<-ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
    ylab(bquote(F[v]/F[m]))+
   labs(x="conditions")
 
-jpeg(filename = "figures/PAM/Kelp_Pam_alperiod_plot.jpeg",width=950, height=650)
-Kelp_Pam_plot
-dev.off()
-
-Kelp_Pam$group<-paste0(Kelp_Pam$treatment,Kelp_Pam$Date,sep="_")
+Kelp_Pam$group<-paste0(Kelp_Pam$treatment_renamed,Kelp_Pam$Date,sep="_")
 Kelp_Pam$Date<-as.POSIXct(Kelp_Pam$Date,format="%Y-%M-%D")
 
-Kelp_Pam_alongtime_plot<-ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=Date,color=treatment))+
+ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=Date,color=treatment_renamed))+
   geom_jitter(shape = 16,size=3,alpha=0.8)+
   #geom_smooth(se=F,size=2,alpha=0.5)+
-  geom_boxplot(aes(x=Date,group=group,fill=treatment),color="black",outlier.alpha = 0)+
+  geom_boxplot(aes(x=Date,group=group,fill=treatment_renamed),color="black",outlier.alpha = 0)+
   facet_wrap(species~.,ncol=1)+
-  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
-  scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_fill_manual(values=c("lightgrey","#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("lightgrey","#92c5de","#E48121","#FC1D28","#901C21"))+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1326,50 +674,52 @@ Kelp_Pam_alongtime_plot<-ggplot(Kelp_Pam,aes(y=`Fv/Fm`,x=Date,color=treatment))+
 # changer les stick x : mettre 1 axe par date (donc 7 tick)
 # ploter la température (sur un autre graph ? ou par dessus ?)
 
-jpeg(filename = "figures/PAM/Kelp_Pam_alongtime_plot.jpeg",width=950, height=650)
-Kelp_Pam_alongtime_plot
-dev.off()
-
 # Is there outlier ? 
 library(EnvStats)
 library(ggpubr)
 # ALARIA ####
 AE_PAM<-Kelp_Pam[Kelp_Pam$species=="Alaria",]
 
-AE_PAM_C0<-AE_PAM[AE_PAM$treatment=="C0",]
+AE_PAM_T0<-AE_PAM[AE_PAM$treatment_renamed=="T0",]
 #AE_PAM_C0_day1<-AE_PAM_C0[AE_PAM_C0$Sampling=="exp_day1",]
-rosnerTest(AE_PAM_C0$`Fv/Fm`, k = 1)$all.stats # 1 outlier
-AE_PAM_C0<-AE_PAM_C0[!AE_PAM_C0$`Fv/Fm`==0.624,]
+rosnerTest(AE_PAM_T0$`Fv/Fm`, k = 2)$all.stats # no outlier
+shapiro.test(AE_PAM_T0$`Fv/Fm`) # almost normal : p-value = 0.01946
+ggqqplot(AE_PAM_T0$`Fv/Fm`)
+
+AE_PAM_C0<-AE_PAM[AE_PAM$treatment_renamed=="C",]
+rosnerTest(AE_PAM_C0$`Fv/Fm`, k = 1)$all.stats # no outlier
 shapiro.test(AE_PAM_C0$`Fv/Fm`) # Normal (pvalue>0.05)
 ggqqplot(AE_PAM_C0$`Fv/Fm`)
 
-AE_PAM_C2<-AE_PAM[AE_PAM$treatment=="C2",]
-AE_PAM_C2_day1<-AE_PAM_C2[AE_PAM_C2$Sampling=="exp_day1",]
-rosnerTest(AE_PAM_C2_day1$`Fv/Fm`, k = 2)$all.stats # no outlier 
-shapiro.test(AE_PAM_C2_day1$`Fv/Fm`) # not Normal (pvalue<0.05)
-ggqqplot(AE_PAM_C2_day1$`Fv/Fm`) #0.390 seems to be an outlier, what if we compare with all the pam data of Alaria ?
-rosnerTest(AE_PAM_C2$`Fv/Fm`, k = 2)$all.stats #2 outliers : 0.390 & 0.623
-shapiro.test(AE_PAM_C2$`Fv/Fm`) # not normal
-ggqqplot(AE_PAM_C2$`Fv/Fm`) # indeed, 2 outLIERS
-AE_PAM_C2<-AE_PAM_C2[!AE_PAM_C2$`Fv/Fm`==0.390,]
-AE_PAM_C2<-AE_PAM_C2[!AE_PAM_C2$`Fv/Fm`==0.623,]
-
-AE_PAM_C1<-AE_PAM[AE_PAM$treatment=="C1",]
+AE_PAM_C1<-AE_PAM[AE_PAM$treatment_renamed=="1MH",]
 ggqqplot(AE_PAM_C1$`Fv/Fm`) 
-rosnerTest(AE_PAM_C1$`Fv/Fm`, k = 1)$all.stats #0.647 is an outlier
-AE_PAM_C1<-AE_PAM_C1[!AE_PAM_C1$`Fv/Fm`==0.647,]
+rosnerTest(AE_PAM_C1$`Fv/Fm`, k = 2)$all.stats #0.647 is an outlier
+AE_PAM_C1<-AE_PAM_C1[!AE_PAM_C1$`Fv/Fm`==0.623,]
+AE_PAM_C1<-AE_PAM_C1[!AE_PAM_C1$`Fv/Fm`==0.390,]
 
-AE_PAM_C3<-AE_PAM[AE_PAM$treatment=="C3",]
+AE_PAM_C2<-AE_PAM[AE_PAM$treatment_renamed=="HT",]
+rosnerTest(AE_PAM_C2$`Fv/Fm`, k = 2)$all.stats # no outlier 
+shapiro.test(AE_PAM_C2$`Fv/Fm`) # Normal
+ggqqplot(AE_PAM_C2$`Fv/Fm`) 
+
+AE_PAM_C3<-AE_PAM[AE_PAM$treatment_renamed=="2MH",]
 ggqqplot(AE_PAM_C3$`Fv/Fm`) 
+shapiro.test(AE_PAM_C3$`Fv/Fm`) # Normal
 rosnerTest(AE_PAM_C3$`Fv/Fm`, k = 1)$all.stats #no outlier
 
 # Rbind
-AE_PAM<-rbind(AE_PAM_C0,AE_PAM_C1,AE_PAM_C2,AE_PAM_C3)
-rm(AE_PAM_C0,AE_PAM_C1,AE_PAM_C2,AE_PAM_C3)
+AE_PAM<-rbind(AE_PAM_T0,AE_PAM_C0,AE_PAM_C1,AE_PAM_C2,AE_PAM_C3)
+rm(AE_PAM_T0,AE_PAM_C0,AE_PAM_C1,AE_PAM_C2,AE_PAM_C3)
+
 # LAMINARIA ####
 LD_PAM<-Kelp_Pam[Kelp_Pam$species=="Laminaria",]
 
-LD_PAM_C0<-LD_PAM[LD_PAM$treatment=="C0",]
+LD_PAM_T0<-LD_PAM[LD_PAM$treatment_renamed=="T0",]
+ggqqplot(LD_PAM_T0$`Fv/Fm`)
+rosnerTest(LD_PAM_T0$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(LD_PAM_T0$`Fv/Fm`) # Normal
+
+LD_PAM_C0<-LD_PAM[LD_PAM$treatment_renamed=="C",]
 ggqqplot(LD_PAM_C0$`Fv/Fm`)
 rosnerTest(LD_PAM_C0$`Fv/Fm`, k = 2)$all.stats # 2 outliers:  0.473 & 0.478
 LD_PAM_C0<-LD_PAM_C0[!LD_PAM_C0$`Fv/Fm`==0.473,]
@@ -1377,70 +727,76 @@ LD_PAM_C0<-LD_PAM_C0[!LD_PAM_C0$`Fv/Fm`==0.478,]
 shapiro.test(LD_PAM_C0$`Fv/Fm`) # Normal (pvalue>0.05)
 ggqqplot(LD_PAM_C0$`Fv/Fm`)
 
-LD_PAM_C1<-LD_PAM[LD_PAM$treatment=="C1",]
+LD_PAM_C1<-LD_PAM[LD_PAM$treatment_renamed=="HT",]
 rosnerTest(LD_PAM_C1$`Fv/Fm`, k = 1)$all.stats # 1 outlier : 0.528
 LD_PAM_C1<-LD_PAM_C1[!LD_PAM_C1$`Fv/Fm`==0.528,]
-shapiro.test(LD_PAM_C1$`Fv/Fm`) # Normal (pvalue>0.05)
+shapiro.test(LD_PAM_C1$`Fv/Fm`) # Almost Normal
 ggqqplot(LD_PAM_C1$`Fv/Fm`)
 
-LD_PAM_C2<-LD_PAM[LD_PAM$treatment=="C2",]
+LD_PAM_C2<-LD_PAM[LD_PAM$treatment_renamed=="1MH",]
 rosnerTest(LD_PAM_C2$`Fv/Fm`, k = 2)$all.stats # 2 outliers : 0.523 & 0.577
 LD_PAM_C2<-LD_PAM_C2[!LD_PAM_C2$`Fv/Fm`==0.523,]
 LD_PAM_C2<-LD_PAM_C2[!LD_PAM_C2$`Fv/Fm`==0.577,]
 shapiro.test(LD_PAM_C2$`Fv/Fm`) # Normal (pvalue>0.05)
 ggqqplot(LD_PAM_C2$`Fv/Fm`)
 
-
-LD_PAM_C3<-LD_PAM[LD_PAM$treatment=="C3",]
+LD_PAM_C3<-LD_PAM[LD_PAM$treatment_renamed=="2MH",]
 rosnerTest(LD_PAM_C3$`Fv/Fm`, k = 1)$all.stats # 1 outlier : 0.409
 LD_PAM_C3<-LD_PAM_C3[!LD_PAM_C3$`Fv/Fm`==0.409,]
-shapiro.test(LD_PAM_C3$`Fv/Fm`) # Normal (pvalue>0.05)
+shapiro.test(LD_PAM_C3$`Fv/Fm`) # Almost normal
 ggqqplot(LD_PAM_C3$`Fv/Fm`)
 
-LD_PAM<-rbind(LD_PAM_C0,LD_PAM_C1,LD_PAM_C2,LD_PAM_C3)
-rm(LD_PAM_C0,LD_PAM_C1,LD_PAM_C2,LD_PAM_C3)
+LD_PAM<-rbind(LD_PAM_T0,LD_PAM_C0,LD_PAM_C1,LD_PAM_C2,LD_PAM_C3)
+rm(LD_PAM_T0,LD_PAM_C0,LD_PAM_C1,LD_PAM_C2,LD_PAM_C3)
 
 # SACCHARINA ####
 
 SL_PAM<-Kelp_Pam[Kelp_Pam$species=="Saccharina",]
 
-SL_PAM_C0<-SL_PAM[SL_PAM$treatment=="C0",]
-ggqqplot(SL_PAM_C0$`Fv/Fm`)
-rosnerTest(SL_PAM_C0$`Fv/Fm`, k = 1)$all.stats # no outlier
-shapiro.test(SL_PAM_C0$`Fv/Fm`) # Normal (pvalue>0.05)
+SL_PAM_T0<-SL_PAM[SL_PAM$treatment_renamed=="T0",]
+ggqqplot(SL_PAM_T0$`Fv/Fm`)
+rosnerTest(SL_PAM_T0$`Fv/Fm`, k = 1)$all.stats # no outlier
+shapiro.test(SL_PAM_T0$`Fv/Fm`) # NORMAL
 
-SL_PAM_C1<-SL_PAM[SL_PAM$treatment=="C1",]
+SL_PAM_C<-SL_PAM[SL_PAM$treatment_renamed=="C",]
+ggqqplot(SL_PAM_C$`Fv/Fm`)
+rosnerTest(SL_PAM_C$`Fv/Fm`, k = 3)$all.stats # 1 outlier
+SL_PAM<-SL_PAM[!SL_PAM$`Fv/Fm`==0.869,]
+shapiro.test(SL_PAM_C$`Fv/Fm`) # Normal (pvalue>0.05)
+
+SL_PAM_C1<-SL_PAM[SL_PAM$treatment_renamed=="HT",]
 ggqqplot(SL_PAM_C1$`Fv/Fm`)
 rosnerTest(SL_PAM_C1$`Fv/Fm`, k = 1)$all.stats # no outlier
-shapiro.test(SL_PAM_C1$`Fv/Fm`) # not Normal (pvalue>0.05)
-# issue in one sampling day ?
-SL_PAM_C1_day1<-SL_PAM_C1[SL_PAM_C1$Sampling=="T0",]
-ggqqplot(SL_PAM_C1_day1$`Fv/Fm`) # ok no outlier
+shapiro.test(SL_PAM_C1$`Fv/Fm`) # Normal (pvalue>0.05)
 
-SL_PAM_C2<-SL_PAM[SL_PAM$treatment=="C2",]
+SL_PAM_C2<-SL_PAM[SL_PAM$treatment_renamed=="1MH",]
 ggqqplot(SL_PAM_C2$`Fv/Fm`)
 rosnerTest(SL_PAM_C2$`Fv/Fm`, k = 1)$all.stats # no outlier
-shapiro.test(SL_PAM_C2$`Fv/Fm`)
+shapiro.test(SL_PAM_C2$`Fv/Fm`)# Normal (pvalue>0.05)
 
-SL_PAM_C3<-SL_PAM[SL_PAM$treatment=="C3",]
+SL_PAM_C3<-SL_PAM[SL_PAM$treatment_renamed=="2MH",]
 ggqqplot(SL_PAM_C3$`Fv/Fm`)
 rosnerTest(SL_PAM_C3$`Fv/Fm`, k = 1)$all.stats # no outlier
-shapiro.test(SL_PAM_C3$`Fv/Fm`)
+shapiro.test(SL_PAM_C3$`Fv/Fm`)# Normal (pvalue>0.05)
 
-# NO outlier with SL
-SL_PAM<-rbind(SL_PAM_C0,SL_PAM_C1,SL_PAM_C2,SL_PAM_C3)
-rm(SL_PAM_C0,SL_PAM_C1,SL_PAM_C2,SL_PAM_C3)
+SL_PAM<-rbind(SL_PAM_T0,SL_PAM_C,SL_PAM_C1,SL_PAM_C2,SL_PAM_C3)
+rm(SL_PAM_T0,SL_PAM_C,SL_PAM_C1,SL_PAM_C2,SL_PAM_C3,SL_PAM_C1)
 
 Kelp_PAM_no_outlier<-rbind(AE_PAM,LD_PAM,SL_PAM)
+rm(AE_PAM,LD_PAM,SL_PAM)
+
+Kelp_PAM_no_outlier$species_modified<-"AE"
+Kelp_PAM_no_outlier$species_modified[Kelp_PAM_no_outlier$species=="Laminaria"]<-"LD"
+Kelp_PAM_no_outlier$species_modified[Kelp_PAM_no_outlier$species=="Saccharina"]<-"SL"
+Kelp_PAM_no_outlier<-Kelp_PAM_no_outlier[!is.na(Kelp_PAM_no_outlier$species)=="TRUE",]
 
 # PLOTs without the outliers: 
-Kelp_PAM_no_outlier_no_T0<-Kelp_PAM_no_outlier[!Kelp_PAM_no_outlier$Sampling=="T0",]
-Kelp_Pam_plot_no_outlier<-ggplot(Kelp_PAM_no_outlier_no_T0,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
+Kelp_Pam_plot_no_outlier<-ggplot(Kelp_PAM_no_outlier,aes(y=`Fv/Fm`,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
   geom_jitter(shape = 21,color="black",size=3)+
-  facet_wrap(~species)+
-  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Kelp_Pam,fun.data = give.n, geom = "text",size=10)+
+  facet_wrap(~species_modified)+
+  scale_fill_manual(values=c("lightgrey","#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment_renamed),colour="black",data=Kelp_PAM_no_outlier,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1454,43 +810,193 @@ jpeg(filename = "figures/PAM/Kelp_Pam_alperiod_plot_no_outlier.jpeg",width=950, 
 Kelp_Pam_plot_no_outlier
 dev.off()
 
+Kelp_PAM_no_outlier$date_modified<-0
 
-Kelp_Pam_alongtime_plot_no_outlier<-ggplot(Kelp_PAM_no_outlier,aes(y=`Fv/Fm`,x=Date,color=treatment))+
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day1"&Kelp_PAM_no_outlier$treatment_renamed=="C"]<-2.125/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day1"&Kelp_PAM_no_outlier$treatment_renamed=="HT"]<-2.375/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day1"&Kelp_PAM_no_outlier$treatment_renamed=="1MH"]<-2.625/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day1"&Kelp_PAM_no_outlier$treatment_renamed=="2MH"]<-2.875/2
+
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day2"&Kelp_PAM_no_outlier$treatment_renamed=="C"]<-4.25/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day2"&Kelp_PAM_no_outlier$treatment_renamed=="1MH"]<-4.5/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day2"&Kelp_PAM_no_outlier$treatment_renamed=="2MH"]<-4.75/2
+
+
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day3"&Kelp_PAM_no_outlier$treatment_renamed=="HT"]<-5.875/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day3"&Kelp_PAM_no_outlier$treatment_renamed=="2MH"]<-6.125/2
+
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day4"&Kelp_PAM_no_outlier$treatment_renamed=="1MH"]<-7.875/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="exp_day4"&Kelp_PAM_no_outlier$treatment_renamed=="2MH"]<-8.125/2
+
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="TF"&Kelp_PAM_no_outlier$treatment_renamed=="C"]<-9.625/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="TF"&Kelp_PAM_no_outlier$treatment_renamed=="HT"]<-9.875/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="TF"&Kelp_PAM_no_outlier$treatment_renamed=="1MH"]<-10.125/2
+Kelp_PAM_no_outlier$date_modified[Kelp_PAM_no_outlier$Sampling=="TF"&Kelp_PAM_no_outlier$treatment_renamed=="2MH"]<-10.375/2
+
+
+Kelp_PAM_no_outlier$date_modified<-as.numeric(Kelp_PAM_no_outlier$date_modified)
+
+Kelp_Pam_alongtime_plot_no_outlier<-ggplot(Kelp_PAM_no_outlier,aes(y=`Fv/Fm`,x=date_modified,color=treatment_renamed))+
   geom_jitter(shape = 16,size=3,alpha=0.8)+
   #geom_smooth(se=F,size=2,alpha=0.5)+
-  geom_boxplot(aes(x=Date,group=group,fill=treatment),color="black",outlier.alpha = 0)+
-  facet_wrap(species~.,ncol=1)+
-  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
-  scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  geom_boxplot(aes(x=date_modified,group=group,fill=treatment_renamed),color="black",outlier.alpha = 0)+
+  facet_wrap(species_modified~.,ncol=1)+
+  scale_fill_manual(values=c("lightgrey","#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("lightgrey","#92c5de","#E48121","#FC1D28","#901C21"))+
   theme_fira()+
+  #stat_summary(aes(y=0.50,x=date_modified),colour="black",data=Kelp_PAM_no_outlier,fun.data = give.n, geom = "text",size=8)+
+  #scale_x_continuous(label=c("07-02","07-07","07-11","07-14","07-18","07-22"),breaks=c(0,2.5,4.5,6,8,10))+
+  scale_x_continuous(label=c("07-02","07-07","07-11","07-14","07-18","07-22"),breaks=c(0,1.25,2.24,3,4,5))+
+  scale_y_continuous(limits=c(0.500,0.910),breaks=c(0.55,0.65,0.75,0.85),expand = expansion(mult = c(0,0)))+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
         strip.text.x = element_text(size = rel(2)),
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
    ylab(bquote(F[v]/F[m]))+
-  labs(x="conditions")
+  labs(x="time")
 
 # to do :
-# changer les stick x : mettre 1 axe par date (donc 7 tick)
 # ploter la température (sur un autre graph ? ou par dessus ?)
 
 jpeg(filename = "figures/PAM/Kelp_Pam_alongtime_plot_no_outlier.jpeg",width=950, height=650)
 Kelp_Pam_alongtime_plot_no_outlier
 dev.off()
 
+# Statistics
+# Before to do a repeadted measures ANOVA, 2 assumptions have to be verified :
+# 1 : The dependent variable should be normally or near-to-normally distributed for each group. It is worth noting that the t-test is robust for minor violations in normality, however, if your data is very non-normal, it would be worth using a non-parametric test or bootstrapping.
+# This first assumption has been verified previoulsy (see Rosner & shapiro tests)
+
+# 2 : The data must have what is known as “sphericity”. This means that amount of variable across the differences for all of the groups (both within and between) must be equal or near-to-equal the variances of the differences between all combinations of related groups must be equal. T
+mlm<-stats::lm(`Fv/Fm` ~ treatment_renamed*species*Sampling,data = Kelp_PAM_no_outlier)
+mlm<-tidy(mlm)
+mauchly.test(mlm)
+
+anova_test(data=Kelp_PAM_no_outlier,dv=`Fv/Fm`,wid=ID,within=c(treatment,Sampling,species,mesocosm))
+
+Anova<-aov(`Fv/Fm` ~ treatment_renamed*species*Sampling, data = Kelp_PAM_no_outlier)
+TukeyHSD(Anova)
+#
+#Fit: aov(formula = `Fv/Fm` ~ treatment * species * Sampling, data = Kelp_PAM_no_outlier)
+
+#$treatment
+#              diff         lwr          upr     p adj
+#C-T0     0.041277778  0.015269975  0.067285581 0.0001814 ***
+#HT-T0    0.045570331  0.020082929  0.071057733 0.0000157 ***
+#1MH-T0   0.029954007  0.006302332  0.053605683 0.0052986 ***
+#2MH-T0   0.013944444 -0.007884044  0.035772933 0.4023978 
+#HT-C     0.004292553 -0.024218463  0.032803569 0.9938368
+#1MH-C   -0.011323770 -0.038206332  0.015558791 0.7756826
+#2MH-C   -0.027333333 -0.052626678 -0.002039989 0.0268703 *
+#1MH-HT  -0.015616324 -0.041995747  0.010763099 0.4819972
+#2MH-HT  -0.031625887 -0.056383817 -0.006867956 0.0047773
+#2MH-1MH -0.016009563 -0.038873273  0.006854147 0.3074530
+
+#$species
+#                             diff         lwr         upr     p adj
+#Laminaria-Alaria      0.006723706 -0.009569432  0.02301684 0.5947457
+#Saccharina-Alaria    -0.058974844 -0.075187533 -0.04276216 0.0000000
+#Saccharina-Laminaria -0.065698551 -0.082030610 -0.04936649 0.0000000
+
+#Let's focus on Saccharina
+Kelp_PAM_no_outlier_SL<-Kelp_PAM_no_outlier[Kelp_PAM_no_outlier$species_modified=="SL",]
+
+#summary(P <- powerTransform(`Fv/Fm` ~ treatment_renamed*Sampling, Kelp_PAM_no_outlier_SL))
+#Kelp_PAM_no_outlier_SL$new_data<-bcPower(Kelp_PAM_no_outlier_SL$`Fv/Fm`,P$roundlam)
+
+#dataframe<-Kelp_PAM_no_outlier[,2:8]
+#dataframe<-dataframe[,-6]
+#dataframe<-dataframe[,-4]
+#dataframe$treatment<-Kelp_PAM_no_outlier$treatment_renamed
+#dataframe<-na.omit(dataframe)
+
+Anova<-aov(`Fv/Fm` ~ treatment_renamed*Sampling*ID, data = Kelp_PAM_no_outlier)
+
+#dataframe$values<-dataframe$`Fv/Fm`
+#res.aov <- anova_test(
+#  data = dataframe, dv = values, wid = ID,
+#  between = c(Sampling))
+
+#pairwise_t_test(dataframe,values ~ Sampling, paired = TRUE, p.adjust.method = "bonferroni") 
+
+TukeyHSD(Anova)
+#$treatment
+#              diff         lwr           upr     p adj
+#C-T0     0.041277778  0.009555863  0.072999693 0.0037726 ***
+#HT-T0    0.045570331  0.014483153  0.076657508 0.0006931 ***
+#1MH-T0   0.029954007  0.001105879  0.058802136 0.0374456
+#2MH-T0   0.013944444 -0.012679929  0.040568818 0.6038428
+#HT-C     0.004292553 -0.030482549  0.039067656 0.9971518
+#1MH-C   -0.011323770 -0.044112635  0.021465094 0.8777832
+#2MH-C   -0.027333333 -0.058183818  0.003517151 0.1097668
+#1MH-HT  -0.015616324 -0.047791506  0.016558859 0.6713075
+#2MH-HT  -0.031625887 -0.061823322 -0.001428451 0.0349351
+#2MH-1MH -0.016009563 -0.043896604  0.011877478 0.5141338
+
+#$Sampling
+#                          diff          lwr         upr     p adj
+#T0-exp_day1       -0.054534770 -0.086973122 -0.02209642 0.0000335 ***
+#exp_day3-exp_day1 -0.070676144 -0.109403507 -0.03194878 0.0000047 ***
+#exp_day4-exp_day1 -0.086184652 -0.124589653 -0.04777965 0.0000000 ***
+#exp_day2-exp_day1 -0.069266925 -0.104565409 -0.03396844 0.0000006 ***
+#TF-exp_day1       -0.057304743 -0.089561604 -0.02504788 0.0000092 ***
+
+
+# diff T0 vs. day 1: 
+#                          diff          lwr         upr     p adj
+#T0:T0-C:exp_day1          -0.0755571429 -0.149207345 -0.0019069407 0.0360863 *
+#T0:T0-HT:exp_day1         -0.0771404762 -0.148089117 -0.0061918355 0.0158135 *
+#T0:T0-1MH:exp_day1        -0.0782844156 -0.151934618 -0.0046342135 0.0221229 *
+#T0:T0-2MH:exp_day1        -0.1013263736 -0.169906005 -0.0327467423 0.0000212 ***
+
+# 2MH:
+#                                    diff          lwr         upr     p adj
+#2MH:exp_day2-2MH:exp_day1 -0.1021025641 -0.184753869 -0.0194512592 0.0016558 ***
+#2MH:exp_day3-2MH:exp_day1 -0.1242986425 -0.207963155 -0.0406341297 0.0000181 ***
+#2MH:exp_day4-2MH:exp_day1 -0.1309914530 -0.213642758 -0.0483401481 0.0000025 ***
+
+
+cat(complete_code("Un code qui test la différence statistique de Fv/Fm dans le dataframe Kelp_PAM_no_outlier en fonction du temps (Date) et des conditons subis (treatment), du réplicas de conditions (mesocosm) et de l'espèce (Alaria, Laminaria et Saccharina) en utilisant une anova avec des mesures répétées dans le temps et un test post hoc de tukey"))
+
+
+analyse_FvFm <- function(Kelp_PAM_no_outlier){
+  # Library pour les tests statistiques
+  library(nlme)
+  
+  # Modèle mixte pour l'analyse de variance
+  model <- lme(data = Kelp_PAM_no_outlier,
+               fixed = FvFm ~ Date + treatment + Species,
+               random = ~1|mesocosm,
+               na.action = na.exclude) # Ignorer les valeurs manquantes
+  
+  # Analyse de variance
+  anova <- anova(model)
+  
+  # Résultats
+  return(anova)
+}
+
+TukeyHSD(anova)
 #### CORALLINE ####
 Coralline_PAM <- read_excel("data/Coralline_PAM_data.xlsx")
 give.n <- function(x){
    return(c(y = mean(x), label = length(x)))
 }
+Coralline_PAM$treatment_renamed <- "C"
+Coralline_PAM$treatment_renamed[Coralline_PAM$treatment=="C1"] <- "HT"
+Coralline_PAM$treatment_renamed[Coralline_PAM$treatment=="C2"] <- "1MH"
+Coralline_PAM$treatment_renamed[Coralline_PAM$treatment=="C3"] <- "2MH"
+
+Coralline_PAM$treatment_renamed <- fct_relevel(Coralline_PAM$treatment_renamed, c("C","HT","1MH","2MH"))
 
 # All period merged
-Coralline_Pam_allperiod_plot<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
+ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
   geom_jitter(shape = 21,color="black",size=3)+
   scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Coralline_PAM,fun.data = give.n, geom = "text",size=10)+
+  stat_summary(aes(y=0.31,x=treatment_renamed),colour="black",data=Coralline_PAM,fun.data = give.n, geom = "text",size=10)+
+  scale_y_continuous(breaks=c(0.30,0.40,0.50,0.60,0.70))+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1500,19 +1006,19 @@ Coralline_Pam_allperiod_plot<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=treatment,fil
    ylab(bquote(F[v]/F[m]))+
   labs(x="conditions")
 
-jpeg(filename = "figures/PAM/Coralline_Pam_allperiod_plot.jpeg",width=950, height=650)
-Coralline_Pam_allperiod_plot
-dev.off()
+Coralline_PAM$group<-paste0(Coralline_PAM$treatment_renamed,Coralline_PAM$Date,sep="_")
+Coralline_PAM$Date_modified<-1
+Coralline_PAM$Date_modified[Coralline_PAM$Sampling=="exp_day2"]<-2
 
-Coralline_PAM$group<-paste0(Coralline_PAM$treatment,Coralline_PAM$Date,sep="_")
-
-Coralline_PAM_alongtime_plot<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=Date,color=treatment))+
+ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=Date_modified,color=treatment_renamed))+
   geom_jitter(shape = 16,size=3,alpha=0.8)+
   #geom_smooth(se=F,size=2,alpha=0.5)+
-  geom_boxplot(aes(x=Date,group=group,fill=treatment),color="black",outlier.alpha = 0)+
+  geom_boxplot(aes(x=Date_modified,group=group,fill=treatment_renamed),color="black",outlier.alpha = 0)+
   scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
   scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
   theme_fira()+
+  scale_x_continuous(breaks=c(1,2),label=c("July 12", "July 20"))+
+  scale_y_continuous(breaks=c(0.30,0.40,0.50,0.60,0.70))+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
         strip.text.x = element_text(size = rel(2)),
@@ -1521,9 +1027,6 @@ Coralline_PAM_alongtime_plot<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=Date,color=tr
    ylab(bquote(F[v]/F[m]))+
   labs(x="conditions")
 
-jpeg(filename = "figures/PAM/Coralline_PAM_alongtime_plot.jpeg",width=950, height=650)
-Coralline_PAM_alongtime_plot
-dev.off()
 
 # is there any outlier ?
 Coralline_PAM_C0<-Coralline_PAM[Coralline_PAM$treatment=="C0",]
@@ -1550,11 +1053,11 @@ shapiro.test(Coralline_PAM_C3$`Fv/Fm`) #Normal
 Coralline_PAM<-Coralline_PAM[!Coralline_PAM$`Fv/Fm`==0.707 ,]
 
 # Plots without the outlier:
-Coralline_Pam_allperiod_plot_no_outlier<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=treatment,fill=treatment))+
+Coralline_Pam_allperiod_plot_no_outlier<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=treatment_renamed,fill=treatment_renamed))+
   geom_boxplot(outlier.alpha = 0)+
   geom_jitter(shape = 21,color="black",size=3)+
   scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Coralline_PAM,fun.data = give.n, geom = "text",size=10)+
+  stat_summary(aes(y=0.31,x=treatment_renamed),colour="black",data=Coralline_PAM,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1568,12 +1071,29 @@ jpeg(filename = "figures/PAM/Coralline_Pam_allperiod_plot_no_outlier.jpeg",width
 Coralline_Pam_allperiod_plot_no_outlier
 dev.off()
 
-Coralline_PAM_alongtime_plot_no_outlier<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=Date,color=treatment))+
+
+Coralline_PAM$Date_modified_treatment<-paste0(Coralline_PAM$Date_modified,sep="_",Coralline_PAM$treatment)
+
+Coralline_PAM$x_axis <- 0.25
+Coralline_PAM$x_axis[Coralline_PAM$Date_modified_treatment=="1_C1"] <- 0.5
+Coralline_PAM$x_axis[Coralline_PAM$Date_modified_treatment=="1_C2"] <- 0.75
+Coralline_PAM$x_axis[Coralline_PAM$Date_modified_treatment=="1_C3"] <- 1
+
+Coralline_PAM$x_axis[Coralline_PAM$Date_modified_treatment=="2_C0"] <- 1.5
+Coralline_PAM$x_axis[Coralline_PAM$Date_modified_treatment=="2_C1"] <- 1.75
+Coralline_PAM$x_axis[Coralline_PAM$Date_modified_treatment=="2_C2"] <- 2
+Coralline_PAM$x_axis[Coralline_PAM$Date_modified_treatment=="2_C3"] <- 2.25
+
+
+Coralline_PAM_alongtime_plot_no_outlier<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=x_axis,color=treatment_renamed))+
   geom_jitter(shape = 16,size=3,alpha=0.8)+
   #geom_smooth(se=F,size=2,alpha=0.5)+
-  geom_boxplot(aes(x=Date,group=group,fill=treatment),color="black",outlier.alpha = 0)+
+  geom_boxplot(aes(x=x_axis,group=group,fill=treatment_renamed),color="black",outlier.alpha = 0)+
   scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
   scale_color_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.31,x=x_axis),colour="black",data=Coralline_PAM,fun.data = give.n, geom = "text",size=10)+
+  scale_x_continuous(breaks=c(0.625,1.875),label=c("July 12", "July 20"))+
+  scale_y_continuous(breaks=c(0.30,0.40,0.50,0.60,0.70))+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1586,9 +1106,18 @@ Coralline_PAM_alongtime_plot_no_outlier<-ggplot(Coralline_PAM,aes(y=`Fv/Fm`,x=Da
 jpeg(filename = "figures/PAM/Coralline_PAM_alongtime_plot_no_outlier.jpeg",width=950, height=650)
 Coralline_PAM_alongtime_plot_no_outlier
 dev.off()
+
+Anova<-aov(`Fv/Fm` ~ treatment_renamed*Sampling, data = Coralline_PAM)
+TukeyHSD(Anova)
+#2MH-HT   0.05468000  0.00267948 0.10668052 0.0353672 *
+#2MH-1MH  0.05303000  0.00049060 0.10556940 0.0470159 *
+
+#HT:exp_day2-2MH:exp_day1  -0.090209790 -0.17948538 -0.0009342011 0.0457796 *
+#2MH:exp_day2-HT:exp_day2   0.103613636  0.01264911  0.1945781653 0.0142854 *
+
 ```
 
-## 8° Growth <br>
+## 4° Growth <br>
 ```{r Growth , echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
 # KELP ####
 Growth <-  read_excel("data/GROWTH.xlsx", 
@@ -1624,15 +1153,21 @@ give.n <- function(x){
 
 #Growth<-inner_join(Growth,Growth_sd,by=c("species","treatment"))
 
+Growth$treatment_renamed <- "C"
+Growth$treatment_renamed[Growth$treatment=="C1"] <- "HT"
+Growth$treatment_renamed[Growth$treatment=="C2"] <- "1MH"
+Growth$treatment_renamed[Growth$treatment=="C3"] <- "2MH"
 
-Growth_plot<-ggplot(Growth,aes(x=treatment,fill=treatment))+
+Growth$treatment_renamed<-fct_relevel(Growth$treatment_renamed, c("C","HT","1MH","2MH"))
+
+Growth_plot<-ggplot(Growth,aes(x=treatment_renamed,fill=treatment_renamed))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
   geom_boxplot(aes(y=Growth_rate),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=Growth_rate,fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(y=Growth_rate,fill=treatment_renamed),color="black",size=3)+
   facet_wrap(~species)+
-  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Growth,fun.data = give.n, geom = "text",size=10)+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.4,x=treatment_renamed),colour="black",data=Growth,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1663,10 +1198,12 @@ Growth_normalized$lg_total_lenght<-log(Growth_normalized$`Total lenght (cm)`)
 
 Growth_normalized <- Growth_normalized[!is.infinite(Growth_normalized$lg_growth_rate),] #remove inf values
 Growth_normalized <- Growth_normalized[!is.na(Growth_normalized$lg_growth_rate),] # remove NA
+
 length_lm <- lm(lg_growth_rate ~ lg_total_lenght,data=Growth_normalized)
 plot(lg_growth_rate ~ lg_total_lenght,data=Growth_normalized)
 abline(length_lm)
 summary(length_lm)
+legend("topleft",legend=paste("R2 is", format(summary(length_lm)$r.squared,digits=3)))
 # equation : log(y)=4.2797 + (-1.5663)*log(total_lenght) + 1.024
 Growth_normalized$Normalized_growth_rate<-10^(4.2797 + (-1.5663)*Growth_normalized$lg_total_lenght + 1.024)
 
@@ -1675,11 +1212,12 @@ length_lm_std <- residuals(length_lm, type="pearson")
 shapiro.test(length_lm_std) #p-value = 0.108, normality verified
 qqnorm(length_lm_std)
 qqline(length_lm_std)
-hist(length.lm.std, xlab="standardized residuals")
+hist(length_lm_std, xlab="standardized residuals")
 
+library(car)
 # homogeneity of model variances
-leveneTest(length.lm.std , group = Growth_normalized$lg_growth_rate) # Normal
-leveneTest(length.lm.std , group = Growth_normalized$lg_total_lenght) # Normal
+leveneTest(length_lm_std , group = Growth_normalized$lg_growth_rate) # Homogeneity verified
+leveneTest(length_lm_std , group = Growth_normalized$lg_total_lenght) # Homogeneity verified
 
 ### ANOVA for the final model
 anova(length_lm)
@@ -1691,14 +1229,14 @@ anova(length_lm)
 #---
 #Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
-Normalized_growth_rate_kelp<-ggplot(Growth_normalized,aes(x=treatment,fill=treatment))+
+Normalized_growth_rate_kelp<-ggplot(Growth_normalized,aes(x=treatment_renamed,fill=treatment_renamed))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
   geom_boxplot(aes(y=Normalized_growth_rate),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=Normalized_growth_rate,fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(y=Normalized_growth_rate,fill=treatment_renamed),color="black",size=3)+
   facet_wrap(~species)+
-  scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Growth_normalized,fun.data = give.n, geom = "text",size=10)+
+  scale_fill_manual(values=c("#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=0.2,x=treatment_renamed),colour="black",data=Growth_normalized,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1711,9 +1249,21 @@ jpeg(filename = "figures/Growth/Normalized_growth_rate_kelp.jpeg",width=950, hei
 Normalized_growth_rate_kelp
 dev.off()
 
+Anova<-aov(Normalized_growth_rate ~ treatment_renamed*species, data = Growth_normalized)
+TukeyHSD(Anova)
+#              diff          lwr          upr     p adj
+#LD-AE -0.026614743 -0.046235063 -0.006994423 0.0046274 ***
+#SL-AE  0.008508069 -0.008432724  0.025448862 0.4610589
+#SL-LD  0.035122812  0.013309118  0.056936507 0.0006001 ***
+
 # CORALLINE ####
 Corraline_growth <- read_excel("data/Corraline_growth.xlsx")
-Corraline_growth$treatment <- fct_relevel(Corraline_growth$treatment, c("C0","C1","C2","C3"))
+Corraline_growth$treatment_renamed <- "C"
+Corraline_growth$treatment_renamed[Corraline_growth$treatment=="C1"] <- "HT"
+Corraline_growth$treatment_renamed[Corraline_growth$treatment=="C2"] <- "1MH"
+Corraline_growth$treatment_renamed[Corraline_growth$treatment=="C3"] <- "2MH"
+
+Corraline_growth$treatment_renamed<-fct_relevel(Corraline_growth$treatment_renamed, c("C","HT","1MH","2MH"))
 
 # Plots  ####
 give.n <- function(x){
@@ -1743,13 +1293,13 @@ Corraline_growth<-Corraline_growth[!Corraline_growth$ID==68,]
 Corraline_growth<-Corraline_growth[!Corraline_growth$ID==74,]
 shapiro.test(Corraline_growth$delta_dry_weight) # normal
 
-Corraline_growth_plot<-ggplot(Corraline_growth,aes(x=treatment,fill=treatment))+
+Corraline_growth_plot_no_outlier<-ggplot(Corraline_growth,aes(x=treatment_renamed,fill=treatment_renamed))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
   geom_boxplot(aes(y=delta_dry_weight),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment_renamed),color="black",size=3)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Corraline_growth,fun.data = give.n, geom = "text",size=10)+
+  stat_summary(aes(y=0.4,x=treatment_renamed),colour="black",data=Corraline_growth,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1758,10 +1308,13 @@ Corraline_growth_plot<-ggplot(Corraline_growth,aes(x=treatment,fill=treatment))+
         legend.position="none")+
   labs(y="Delta dry weight (g)",x="conditions")
 
-jpeg(filename = "figures/Growth/Corraline_growth_plot.jpeg",width=950, height=650)
-Corraline_growth_plot
+jpeg(filename = "figures/Growth/Corraline_growth_plot_no_outlier.jpeg",width=950, height=650)
+Corraline_growth_plot_no_outlier
 dev.off()
 
+Anova<-aov(delta_dry_weight ~ treatment*mesocosm, data = Corraline_growth)
+TukeyHSD(Anova)
+# NOTHING
 
 # SNAILS ####
 snails_growth <- read_excel("data/snails_growth.xlsx", 
@@ -1798,13 +1351,21 @@ snails_growth<-snails_growth[!snails_growth$ID_color=="14_Red",]
 snails_growth<-snails_growth[!snails_growth$ID_color=="5_Gold",]
 shapiro.test(snails_growth$delta_dry_weight) # normal
 
-Snails_growth_plot<-ggplot(snails_growth,aes(x=treatment,fill=treatment))+
+snails_growth$treatment_renamed <- "C"
+snails_growth$treatment_renamed[snails_growth$treatment=="C1"] <- "HT"
+snails_growth$treatment_renamed[snails_growth$treatment=="C2"] <- "1MH"
+snails_growth$treatment_renamed[snails_growth$treatment=="C3"] <- "2MH"
+
+snails_growth$treatment_renamed<-fct_relevel(snails_growth$treatment_renamed, c("C","HT","1MH","2MH"))
+
+
+Snails_growth_plot_no_outlier<-ggplot(snails_growth,aes(x=treatment_renamed,fill=treatment_renamed))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
   geom_boxplot(aes(y=delta_dry_weight),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment_renamed),color="black",size=3)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=snails_growth,fun.data = give.n, geom = "text",size=10)+
+  stat_summary(aes(y=0.6,x=treatment_renamed),colour="black",data=snails_growth,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
@@ -1813,15 +1374,19 @@ Snails_growth_plot<-ggplot(snails_growth,aes(x=treatment,fill=treatment))+
         legend.position="none")+
   labs(y="Delta dry weight (g)",x="conditions")
 
-jpeg(filename = "figures/Growth/Corraline_growth_plot.jpeg",width=950, height=650)
-Snails_growth_plot
+jpeg(filename = "figures/Growth/Snails_growth_plot_no_outlier.jpeg",width=950, height=650)
+Snails_growth_plot_no_outlier
 dev.off()
+
+Anova<-aov(delta_dry_weight ~ treatment*mesocosm, data = snails_growth)
+TukeyHSD(Anova)
+# NOTHING
 
 # MUSSELS ####
 
 Mussels_growth <- read_excel("data/Mussels_growth.xlsx", 
      col_types = c("text", "text", "numeric", 
-         "numeric", "date", "date", "numeric", 
+         "numeric", "numeric", "date", "text", 
          "numeric", "numeric", "numeric", 
          "numeric", "date", "text", "text", 
          "text"))
@@ -1836,199 +1401,731 @@ Mussels_growth$delta_dry_weight<-Mussels_growth$dry_weight_TF-Mussels_growth$dry
 
 ggqqplot(Mussels_growth$delta_dry_weight)
 shapiro.test(Mussels_growth$delta_dry_weight) # not normal
-rosnerTest(Mussels_growth$delta_dry_weight, k = 20)$all.stats  # 12 outliers
+rosnerTest(Mussels_growth$delta_dry_weight, k = 12)$all.stats  # 12 outliers
 Mussels_growth$ID_color<-paste(Mussels_growth$ID,Mussels_growth$Color,sep="_")
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="12_White",]
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="17_Red",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="3_Doré",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="1_White",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="1_Red",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="1_Blue",]
 Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="8_Gold",]
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="9_White",]
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="7_Red",]
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="13_White",]
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="11_White",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="5_White",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="6_Gold",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="10_Red",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="6_White",]
 Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="5_Red",]
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="14_Blue",]
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="14_Red",]
-Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="5_Gold",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="10_White",]
+Mussels_growth<-Mussels_growth[!Mussels_growth$ID_color=="8_Red",]
 shapiro.test(Mussels_growth$delta_dry_weight) # normal
 
-ggplot(Mussels_growth ,aes(x=treatment,fill=treatment))+
+Mussels_growth$treatment_renamed <- "C"
+Mussels_growth$treatment_renamed[Mussels_growth$treatment=="C1"] <- "HT"
+Mussels_growth$treatment_renamed[Mussels_growth$treatment=="C2"] <- "1MH"
+Mussels_growth$treatment_renamed[Mussels_growth$treatment=="C3"] <- "2MH"
+
+Mussels_growth$treatment_renamed<-fct_relevel(Mussels_growth$treatment_renamed, c("C","HT","1MH","2MH"))
+
+
+Mussels_growth_plot_no_outlier<-ggplot(Mussels_growth ,aes(x=treatment_renamed,fill=treatment_renamed))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
   geom_boxplot(aes(y=delta_dry_weight),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment),color="black",size=3)+
+  geom_jitter(shape = 21,aes(y=delta_dry_weight,fill=treatment_renamed),color="black",size=3)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=0.4,x=treatment),colour="black",data=Mussels_growth ,fun.data = give.n, geom = "text",size=10)+
+  stat_summary(aes(y=0.5,x=treatment_renamed),colour="black",data=Mussels_growth ,fun.data = give.n, geom = "text",size=10)+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
         strip.text.x = element_text(size = rel(2)),
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
-  labs(y="Delta BW",x="conditions")
+  labs(y="Delta dry weight (g)",x="conditions")
+
+jpeg(filename = "figures/Growth/Mussels_growth_plot_no_outlier.jpeg",width=950, height=650)
+Mussels_growth_plot_no_outlier
+dev.off()
+
+Anova<-aov(delta_dry_weight ~ treatment*mesocosm, data = Mussels_growth)
+TukeyHSD(Anova)
+# NOTHING
+
 # URCHINS ####
 urchins_biomass <- read_excel("data/urchins_biomass.xlsx", 
      col_types = c("text", "text", "numeric", 
          "numeric", "numeric", "numeric", 
          "numeric"))
-urchins_biomass<-ggplot(urchins_biomass ,aes(x=treatment,fill=treatment))+
+urchins_biomass_sum_n_TF <-urchins_biomass %>%
+  group_by(treatment)%>%
+  summarise(sum_n_TF=sum(n_TF))
+
+urchins_biomass<-merge(urchins_biomass_sum_n_TF,urchins_biomass,by="treatment")
+
+urchins_biomass$treatment_renamed <- "C"
+urchins_biomass$treatment_renamed[urchins_biomass$treatment=="C1"] <- "HT"
+urchins_biomass$treatment_renamed[urchins_biomass$treatment=="C2"] <- "1MH"
+urchins_biomass$treatment_renamed[urchins_biomass$treatment=="C3"] <- "2MH"
+
+urchins_biomass$treatment_renamed<-fct_relevel(urchins_biomass$treatment_renamed, c("C","HT","1MH","2MH"))
+
+
+urchins_biomass_plot<-ggplot(urchins_biomass ,aes(x=treatment_renamed,fill=treatment_renamed))+
   #geom_bar(aes(y=mean_growth),stat='identity',color="black", position=position_dodge()) +
   #geom_errorbar(aes(ymin=mean_growth-sd_growth, ymax=mean_growth+sd_growth),width=.2,position=position_dodge(.9))+
-  geom_boxplot(aes(y=Delta_BW_n,label=n_TF),outlier.alpha = 0)+
-  geom_jitter(shape = 21,aes(y=Delta_BW_n,fill=treatment),color="black",size=3)+
+  geom_boxplot(aes(y=Delta_BW_n),outlier.alpha = 0)+
+  #geom_label(aes(y=-6,x=treatment_renamed,label=sum_n_TF),fill="white",size=12)+
+  geom_text(aes(y=-7,x=treatment_renamed,label=sum_n_TF),fill="white",size=10)+
+  geom_jitter(shape = 21,aes(y=Delta_BW_n,fill=treatment_renamed),color="black",size=3)+
   scale_fill_manual(values=c("#cccccc","#92c5de","#E48121","#FC1D28","#901C21"))+
-  geom_label(aes(y=Delta_BW_n,label=n_TF))+
   theme_fira()+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
         strip.text.x = element_text(size = rel(2)),
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
-  labs(y="Delta BW",x="conditions")
+  labs(y="Delta wet weight (g)",x="conditions")
 
-
-jpeg(filename = "figures/Growth/urchins_biomass.jpeg",width=950, height=650)
-urchins_biomass
+jpeg(filename = "figures/Growth/urchins_biomass_plot.jpeg",width=950, height=650)
+urchins_biomass_plot
 dev.off()
 
+
+Anova<-aov(Delta_BW_n~ treatment, data = urchins_biomass)
+TukeyHSD(Anova)
+# Nothing
 ```
 
-Observations:  <br>
-- LD: growth rate decrease within time (-> stat), no variation withing conditions <br>
-- SL: growth rate stable in time in C0 vs. decrease within time in C2 & C3. For C3, the growth rate is higher than at the other conditions. <br>
-Explanation: A +5°C enhances the growth rate of SL (C3) but low light & salinity limit the growth rate (C2) <br>
-- AE: growth rate decrease within time (-> stat). At C2 the growth rate increased at TF. We do only have one point but giving the previous Chl a data, something might be happenning here. Let's do some bibliography of AE & her maybe love for low salinity. <br>
+## 5° O2 <br>
+```{r raw data,echo=FALSE,warning=FALSE,fig.width=15,fig.height=15}
+O2_data <- read_excel("data/O2-data.xlsx", 
+     col_types = c("text", "numeric", "text", 
+         "text", "numeric", "date", "text", 
+         "numeric", "text", "text", "numeric", "numeric", 
+         "numeric", "text"))
+O2_data$DateTime<-paste(O2_data$date,O2_data$time) 
+O2_data$grp<-paste(O2_data$ID,"_",O2_data$date)
+O2_data$date<-as.character(O2_data$date)
+O2_data<-O2_data %>% 
+    mutate(week = coalesce(week,date))
 
-
-
-
-## 9° Growth vs Chla <br>
-```{r Growth vs Chla, echo=FALSE, warning=FALSE, message=FALSE,results=FALSE, fig.width=15,fig.height=10}
-Gr_Chla<-merge(Growth,Chla)
-Alaria_Gr_Chla<-Gr_Chla[Gr_Chla$Species=="AE",]
-Saccharina_Gr_Chla<-Gr_Chla[Gr_Chla$Species=="SL",]
-Laminaria_Gr_Chla<-Gr_Chla[Gr_Chla$Species=="LD",]
-
-AE_Gr_Chla<-ggplot(Alaria_Gr_Chla,aes(y=`Chla (µg.g)`,x=Growth_rate,colour=Condition))+
-  geom_point(size=5)+ 
-  scale_colour_viridis_d(direction=1)+
-  labs(y="Growth rate (cm/day)",x="Chla (µg.g) ")+
+# graph O2 concentration with time for each ID
+ggplot(O2_data,aes(dt,O2))+
+  geom_point(aes(color=week))+
+  geom_line(aes(group=grp))+
+  facet_wrap(~ID+species)
   theme_fira()+
-  theme(axis.title = element_text(size = rel(1), face = "bold"),
-        axis.text = element_text(size = rel(0.95)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        legend.position="none")
+  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
+        axis.text = element_text(size = rel(1.5)),
+        legend.title = element_text(size = rel(1.5), face = "bold"),
+        plot.title = element_text(size=30, face="bold.italic",hjust = 0.5))+
+  ggtitle("O2 curves before cleaning")
 
-
-SL_Gr_Chla<-ggplot(Saccharina_Gr_Chla,aes(y=`Chla (µg.g)`,x=Growth_rate,colour=Condition))+
-  geom_point(size=5)+ 
-  scale_colour_viridis_d(direction=1)+
-  labs(y="Growth rate (cm/day)",x="Chla (µg.g) ")+
+O2_data_120<-O2_data[O2_data$ID=="120",]
+ggplot(O2_data_120,aes(dt,O2))+
+  geom_point(aes(color=week,shape=date))+
+  geom_line(aes(group=grp,shape=date))+
+  facet_wrap(~week)+
   theme_fira()+
-  theme(axis.title = element_text(size = rel(1), face = "bold"),
-        axis.text = element_text(size = rel(0.95)),
-        axis.text.x = element_text(angle = 60,vjust = 0.5),
-        legend.position="none")
-
-ggarrange(AE_Gr_Chla,SL_Gr_Chla,label=c("AE","SL"))
+  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
+        axis.text = element_text(size = rel(1.5)),
+        legend.title = element_text(size = rel(1.5), face = "bold"),
+        plot.title = element_text(size=30, face="bold.italic",hjust = 0.5))+
+  ggtitle("O2 curves before cleaning")
+  
 ```
-## 13° Temp,Sal,PAR <br>
 
-```{r Temp,Sal,PAR, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
-PAR_alltogether <- read_excel("Desktop/These/Meso NYA 2021/O2/data/PAR_alltogether.xlsx", 
-+     sheet = "All_together", col_types = c("date", 
-+         "text", "text", "numeric"))
+ 1° Data cleaning
 
-ggplot(data=PAR_alltogether)+
-  geom_line(aes(x=DateTime_rounded,y=C0M0,colour=Mesocosm))+
-  facet_wrap(~Condition)
+During a light incubation of any photosynthetic organisms, $O_{2}$ progressively increase with time if photosynthesis occurs. However, for some reasons we can sometimes see outliers in the $O_{2}$ measurement. Theses outliers need to be removed before any analysis. This is the purpose of this 1st step.
 
-ggplot(data=PAR_alltogether)+
-  geom_line(aes(x=DateTime_rounded,y=log(C0M0),colour=Mesocosm),alpha=0.7)+
-  #geom_point(aes(x=DateTime_rounded,y=log(C0M0),colour=Mesocosm),alpha=0.25)+
-  facet_wrap(~Condition)+
+Here are plotted the raw $O_{2}$ measurements after removal of the outliers. We removed : 1) complete graphs when values are way too high &/or variable, 2) all values after 30min of incubations, 3) the first 5mins of incubation, 4) ponctual measurement not following the general trend of a graph.
+
+```{r O2 cleaning,echo=FALSE,warning=FALSE,fig.width=15,fig.height=15}
+
+# A) Remove complete graph when values are way too high & variable
+Weird_graphs<-O2_data %>%
+  filter(ID==52 & date=="2022-07-10" 
+         |ID==17 & week=="2022-07-12" & dt>=1800
+         |ID==17 & week=="2022-07-12" & dt<=20
+         |ID==33 & week=="2022-07-10" & dt<=200
+         |ID==36 & week=="2022-07-10" & dt<=200
+         |ID==42 & week=="2022-07-10" & dt>=1350
+         |ID==42 & week=="2022-07-10" & dt<=10
+         |ID==45 & week=="2022-07-10" & dt<=350
+         |ID==52 & week=="2022-07-05" & dt<=2000
+         |ID==52 & week=="2022-07-10" & dt<=700
+         |ID==52 & week=="DARK" & date=="2022-07-19"
+         |ID==54 & week=="2022-07-02" & dt<=2000
+         |ID==54 & week=="2022-07-10" & dt<=700
+         |ID==54 & mesocosm=="C3M1"
+         |ID==58 & week=="2022-07-10" & dt<=500
+         |ID==62 & week=="2022-07-10" & dt<=1000
+         |ID==78 & week=="2022-07-10"
+         |ID==78 & week=="T0" & dt<=200
+         |ID==84 & week=="DARK" & date=="2022-07-19" & dt<=1000
+         |ID==84 & week=="DARK" & date=="2022-07-19" & dt>=2700
+         |ID==86 & dt<=50
+         |ID==89 & dt<=50
+         |ID==81 & dt<=50
+         |ID==48 & dt<=50
+         |ID==106 & week=="2022-07-14" & dt<=600
+         |ID==113 & week=="2022-07-18" & dt<=1100
+         |ID==113 & week=="DARK" & date=="2022-07-19" & dt<=500
+         |ID==113 & week=="DARK" & date=="2022-07-19" & dt>=1450
+         |species=="Blank3"
+         |species=="Blank4"
+         |ID==46 & week=="2022-07-05" & dt<=750
+         |ID==46 & week=="2022-07-05" & dt>=1550
+         |ID==46 & week=="T0" & dt<=500
+         |ID==46 & week=="T0" & dt>=1500
+         |ID==48 & week=="T0" & dt>=1500
+         |ID==56 & week=="2022-07-10"
+         |ID==56 & week=="DARK" & dt<=1000
+         |ID==56 & week=="DARK" & dt<=2500
+         |ID==65 & week=="2022-07-05" & dt<=2000
+         |ID==77 & week=="DARK" & date=="2022-07-21" & dt<=450
+         |ID==80 & week=="2022-07-14" & dt<=450
+         |ID==99 & week=="2022-07-18"
+         |ID==107 & week=="2022-07-18" & dt<=50
+         |ID==107 & week=="DARK" & date =="2022-07-19"
+         |ID==120 & week=="TF"
+         |ID==120 & week=="2022-07-14" & dt<=350
+         |ID==120 & week=="2022-07-14" & dt>=1100)
+
+O2_data <- anti_join(O2_data,
+                            Weird_graphs, by = c("ID","week","dt"))
+rm(Weird_graphs)
+
+ggplot(O2_data,aes(dt,O2))+
+  geom_point(aes(color=week))+
+  geom_line(aes(group=grp))+
+  facet_wrap(~ID+species)
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
+        axis.text = element_text(size = rel(1.5)),
+        legend.title = element_text(size = rel(1.5), face = "bold"),
+        plot.title = element_text(size=30, face="bold.italic",hjust = 0.5))+
+  ggtitle("O2 curves before cleaning")
+
+```
+
+A second step  is to check the temperature measurements during the incubation. Indeed the temperature influences the O2 calculation. Therefore, it is important to verify that the values of the temperatures used in the calculation do not seem aberrant.
+
+```{r Temperature cleaning,echo=FALSE,warning=FALSE,fig.width=15,fig.height=15}
+ggplot(O2_data,aes(dt,Temp))+
+  geom_point(aes(color=week))+
+  geom_line(aes(group=grp))+
+  facet_wrap(~ID+species)
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
+        axis.text = element_text(size = rel(1.5)),
+        legend.title = element_text(size = rel(1.5), face = "bold"),
+        plot.title = element_text(size=30, face="bold.italic",hjust = 0.5))+
+  ggtitle("O2 curves before cleaning")
+  
+```
+
+The temperature data look good. We don't have to remove any outliers.
+
+ 2° Model & slopes calculation
+
+The second step is to calculate the slope of $O_{2}$ from T0 to TF based on a linear model to obtain the $\Delta(O_{2}$).
+
+```{r Model,echo=FALSE,warning=FALSE,results=FALSE,fig.show='hide'}
+LM<- O2_data %>%
+  group_by(grp) %>%
+  do(broom::tidy(lm(O2~dt, .)))
+
+LM<-LM[LM$term=="dt",]
+O2_data <- merge(O2_data, LM, by = 'grp')
+O2_data_estimate <- O2_data %>% distinct(estimate, .keep_all = TRUE)
+rm(LM)
+# graph O2 with model per grp
+ggplot(O2_data,aes(dt,O2))+
+  geom_point(color="grey60")+
+  geom_line(aes(group=grp))+
+  geom_smooth(aes(group=grp),method="lm",formula="y ~ x")+
+  stat_regline_equation() +
+  theme_minimal()+
+  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
+        axis.text = element_text(size = rel(1.5)),
+        legend.title = element_text(size = rel(1.5), face = "bold"))+
+  facet_wrap(~ID+species)
+```
+
+ 3° Normalization <br>
+
+The third step is to normalize the $O_{2}$(µmol.L) rate with the biomass of the individual.
+
+$$
+normalizedO_{2} (umol.g(dw)^-.^1min^-.^1) =  \frac{O_{2} (umol/L.min) * V(L)} {Biomass (g)}
+$$ <br> with V = Volume of the chamber, in L (V=30L for the big chamber and V=XXL for the small chamber) <br>
+
+In our case we used the dry weight (g). Each individual has been weighted before each incubation. We use a regression relation between the wet & the dry weight to calculate the dry weight from the wet one at each incubation time.
+
+ 4° O2 Results <br>
+
+```{r Normalization & O2 results, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
+
+# Merge O2 & PAR data 
+O2_data$DateTime<-as_datetime(O2_data$DateTime)
+O2_data$DateTime_rounded<-lubridate::round_date(
+  O2_data$DateTime,
+  unit = "5 min")
+
+PAR <- read_excel("data/O2-data.xlsx",sheet = "PAR", col_types = c("date", "date", "numeric"))
+PAR <- separate(PAR ,Time, c("bin","time"), sep = " ")
+PAR <- select(PAR,-bin)
+PAR$DateTime_rounded <- paste(PAR$Date,"",PAR$time)
+
+O2_data$DateTime_rounded<-as_datetime(O2_data$DateTime_rounded)
+PAR$DateTime_rounded<-as_datetime(PAR$DateTime_rounded)
+O2_PAR <- inner_join(O2_data, PAR, by = "DateTime_rounded") 
+rm(PAR)
+
+# add DARK incubations
+O2_DARK<-O2_data[O2_data$week=="DARK",] #Add dark incubations
+O2_DARK$Date<-O2_DARK$date
+O2_DARK$time.y<-O2_DARK$time
+O2_DARK$PAR<-0
+
+O2_PAR <- O2_PAR %>% 
+        rename("time" = "time.x")
+
+O2_PAR <- rbind(O2_PAR,O2_DARK)
+rm(O2_DARK)
+
+O2_PAR$mesocosm[O2_PAR$week=="T0"]<-"T0"
+
+# Add the dry weight
+Kelp_ID <- read_excel("data/Kelp_ID.xlsx", 
+     col_types = c("numeric", "text", "numeric", 
+         "text", "text", "numeric", "numeric", 
+         "numeric", "text", "text", "text"))
+O2_PAR_DW <- inner_join(O2_PAR,Kelp_ID, by = "ID") # merge O2 & PAR data
+rm(Kelp_ID)
+
+#Calculate the dry weight using a regression formula 
+# SL
+SL<-O2_PAR_DW[O2_PAR_DW$species=="Saccharina",]
+SL$Dry_weight<-(SL$`Wet_weight (g)`*0.1664)+0.1548
+# AE
+AE<-O2_PAR_DW[O2_PAR_DW$species=="Alaria",]
+AE$Dry_weight<-(AE$`Wet_weight (g)`*0.2614)-3.1997
+
+O2_PAR_DW<-rbind(SL,AE)
+rm(SL,AE)
+
+O2_PAR_DW_test<-O2_PAR_DW %>%
+  select(grp,mesocosm,species,week,Dry_weight,ID,PAR,O2) %>%
+  group_by(grp,mesocosm,species,week,Dry_weight,ID)%>%
+  summarise(PAR = sum(PAR)/length(PAR)) #mean of PAR received during each incubation (*60 because 1 measure every minute but PAR in sec-1)
+# PAR in μmol m-2 s-1
+
+#O2_data_estimate <- O2_PAR_DW_test %>% distinct(estimate, .keep_all = TRUE)
+
+O2_data_estimate$mesocosm[O2_data_estimate$week=="T0"]<-"T0"
+O2_PAR_DW<-inner_join(O2_data_estimate,O2_PAR_DW_test,by=c("grp","week","ID","mesocosm","species"))
+rm(O2_PAR_DW_test)
+O2_PAR_DW<-O2_PAR_DW[!O2_PAR_DW$estimate>0.06,]
+
+ggplot(O2_PAR_DW,aes(estimate,PAR))+
+  geom_point(aes(color=week))+
+  geom_line(aes(group=grp))+
+  theme_fira()+
+  theme(axis.title = element_text(size = rel(1.5), face = "bold"),
+        axis.text = element_text(size = rel(1.5)),
+        legend.title = element_text(size = rel(1.5), face = "bold"))#+
+    #facet_wrap(~mesocosm)
+
+O2_PAR_DW <- O2_PAR_DW[!is.infinite(O2_PAR_DW$estimate),] #remove inf values
+O2_PAR_DW <- O2_PAR_DW[!is.na(O2_PAR_DW$estimate),] # remove NA
+
+O2_PAR_DW<-O2_PAR_DW[!O2_PAR_DW$estimate>0.06,]
+
+O2_lm <- lm(estimate ~ PAR,data=O2_PAR_DW)
+plot(estimate ~ PAR,data=O2_PAR_DW)
+abline(O2_lm)
+summary(O2_lm)
+legend("topleft",legend=paste("R2 is", format(summary(O2_lm)$r.squared,digits=3))) #R2 = 0.66
+# equation : log(y)=4.2797 + (-1.5663)*log(total_lenght) + 1.024
+# normality of standardized model residuals
+length_lm_std <- residuals(length_lm, type="pearson")
+shapiro.test(length_lm_std) #p-value = 0.108, normality verified
+qqnorm(length_lm_std)
+qqline(length_lm_std)
+hist(length_lm_std, xlab="standardized residuals")
+
+library(car)
+
+#O2_PAR_DW$Normalized_growth_rate<-10^(4.2797 + (-1.5663)*Growth_normalized$lg_total_lenght + 1.024)
+
+#O2_PAR_DW$residuals<-O2_lm$residuals
+
+#O2_PAR_DW$treatment<-"C"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C1M0"]<-"HT"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C1M1"]<-"HT"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C1M2"]<-"HT"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C2M0"]<-"1MH"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C2M1"]<-"1MH"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C2M2"]<-"1MH"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C3M0"]<-"2MH"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C3M1"]<-"2MH"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="C3M2"]<-"2MH"
+#O2_PAR_DW$treatment[O2_PAR_DW$mesocosm=="T0"]<-"T0"
+#O2_PAR_DW$treatment <- fct_relevel(O2_PAR_DW$treatment, c("T0","C","HT","1MH","2MH"))
+
+#O2_PAR_DW$grp<-paste(O2_PAR_DW$species,"_",O2_PAR_DW$treatment,"_",O2_PAR_DW$date)
+
+#O2_PAR_DW$date_modified<-0 # T0
+
+#2022-07-05, J3, 0.75
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="2022-07-05"&O2_PAR_DW$treatment=="IncreasTemp"]<-0.75
+
+#2022-07-10, J8, 2
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="2022-07-10"&O2_PAR_DW$treatment=="1MH"]<-1.94
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="2022-07-10"&O2_PAR_DW$treatment=="2MH"]<-2.07
+
+#2022-07-12, J10, 2.5
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="2022-07-12"&O2_PAR_DW$treatment=="C"]<-2.5
+
+#2022-07-14, J12, 3
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="2022-07-14"&O2_PAR_DW$treatment=="HT"]<-2.94
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="2022-07-14"&O2_PAR_DW$treatment=="2MH"]<-3.07
+
+#2022-07-18, J16, 4
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="2022-07-18"&O2_PAR_DW$treatment=="1MH"]<-3.94
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="2022-07-18"&O2_PAR_DW$treatment=="2MH"]<-4.07
+
+#2022-07-21 & 22, TF, 5
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="TF"&O2_PAR_DW$treatment=="C"]<-4.87
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="TF"&O2_PAR_DW$treatment=="HT"]<-4.93
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="TF"&O2_PAR_DW$treatment=="1MH"]<-5.07
+#O2_PAR_DW$date_modified[O2_PAR_DW$week=="TF"&O2_PAR_DW$treatment=="2MH"]<-5.125
+
+#ggplot(O2_PAR_DW,aes(y=residuals,x=date_modified,color=treatment))+
+ # geom_jitter(shape = 16,size=3,alpha=0.8)+
+#  geom_boxplot(aes(x=date_modified,group=grp,fill=treatment),color="black",outlier.alpha = 0)+
+#  facet_wrap(species~.,ncol=1)+
+#  scale_fill_manual(values=c("lightgrey","#404040","#92c5de","#E48121","#FC1D28","#901C21"))+
+#  scale_color_manual(values=c("lightgrey","#404040","#92c5de","#E48121","#FC1D28","#901C21"))+
+#  stat_summary(aes(y=0.001,x=date_modified),colour="black",data=O2,fun.data = give.n, geom = "text",size=8)+
+#  theme_fira()+
+#  scale_x_continuous(label=c("07-02","07-05","07-10","07-12","07-14","07-18","07-21 & 22"),breaks=c(0,0.75,2,2.5,3,4,5))+
+#  scale_y_continuous(limits=c(-0.015,0.015),breaks=c(-0.01,0.0,0.01),expand = expansion(mult = c(0,0)))+
+#  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+#        axis.text = element_text(size = rel(2)),
+#        strip.text.x = element_text(size = rel(2)),
+#        panel.border = element_rect(colour = "black", fill=NA),
+#        legend.position="none")+
+#   ylab(bquote(F[v]/F[m]))+
+#  labs(x="time")
+
+# PI curves show the effect of light on the estimate
+# Therefore : let's divide the estimate by the mean PAR
+O2_PAR_DW$estimate_normalized<-O2_PAR_DW$estimate/O2_PAR_DW$PAR
+
+O2_PAR_DW$estimate_normalized[O2_PAR_DW$PAR<=0]<-0
+
+O2_PAR_DW$variance<-O2_PAR_DW$std.error^2
+O2_PAR_DW$variance<-O2_PAR_DW$variance/O2_PAR_DW$PAR
+O2_PAR_DW$std_normalized<-sqrt(O2_PAR_DW$variance)
+
+O2_PAR_DW$std_normalized[O2_PAR_DW$PAR<=0]<-0
+
+
+O2<-O2_PAR_DW
+
+# Divide O2 by the dry weight (*0.001 to convert it in kg) and multiply it by the volume of the chamber (V=30L)
+# Rq : To do so, we separate the dataframe per weeks to avoid mixing data (which happens without doing this)
+# Rq 2 : the std of the LM follow the same calculation
+
+T0 <- O2[O2$week=="T0",]
+T0$O2_normalized<-T0$estimate*30/T0$Dry_weight
+T0$variance<-T0$std.error^2
+T0$variance<-T0$variance*30/T0$Dry_weight
+T0$std_normalized<-sqrt(T0$variance)
+
+Week1b <- O2[O2$week=="2022-07-05",]
+Week1b$O2_normalized<-Week1b$estimate*30/Week1b$Dry_weight
+Week1b$variance<-Week1b$std.error^2
+Week1b$variance<-Week1b$variance*30/Week1b$Dry_weight
+Week1b$std_normalized<-sqrt(Week1b$variance)
+
+Week1 <- O2[O2$week=="2022-07-10",]
+Week1$O2_normalized<-Week1$estimate*30/Week1$Dry_weight
+Week1$variance<-Week1$std.error^2
+Week1$variance<-Week1$variance*30/Week1$Dry_weight
+Week1$std_normalized<-sqrt(Week1$variance)
+
+Week2 <- O2[O2$week=="2022-07-12",]
+Week2$O2_normalized<-Week2$estimate*30/Week2$Dry_weight
+Week2$variance<-Week2$std.error^2
+Week2$variance<-Week2$variance*30/Week2$Dry_weight
+Week2$std_normalized<-sqrt(Week2$variance)
+
+Week3 <- O2[O2$week=="2022-07-14",]
+Week3$O2_normalized<-Week3$estimate*30/Week3$Dry_weight
+Week3$variance<-Week3$std.error^2
+Week3$variance<-Week3$variance*30/Week3$Dry_weight
+Week3$std_normalized<-sqrt(Week3$variance)
+
+Week4 <- O2[O2$week=="2022-07-18",]
+Week4$O2_normalized<-Week4$estimate*30/Week4$Dry_weight
+Week4$variance<-Week4$std.error^2
+Week4$variance<-Week4$variance*30/Week4$Dry_weight
+Week4$std_normalized<-sqrt(Week4$variance)
+
+TF <- O2[O2$week=="TF",]
+TF$O2_normalized<-TF$estimate*30/TF$Dry_weight
+TF$variance<-TF$std.error^2
+TF$variance<-TF$variance*30/TF$Dry_weight
+TF$std_normalized<-sqrt(TF$variance)
+
+O2<-rbind(T0, Week1,Week1b, Week2, Week3, Week4, TF)
+rm(T0, Week1, Week1b,Week2, Week3, Week4, TF)
+
+# For a PAR = 150
+O2$O2_normalized<-O2$O2_normalized*150
+
+# Define the order of apparition the x axis
+O2$treatment<-"C"
+O2$treatment[O2$mesocosm=="C1M0"]<-"HT"
+O2$treatment[O2$mesocosm=="C1M1"]<-"HT"
+O2$treatment[O2$mesocosm=="C1M2"]<-"HT"
+O2$treatment[O2$mesocosm=="C2M0"]<-"1MH"
+O2$treatment[O2$mesocosm=="C2M1"]<-"1MH"
+O2$treatment[O2$mesocosm=="C2M2"]<-"1MH"
+O2$treatment[O2$mesocosm=="C3M0"]<-"2MH"
+O2$treatment[O2$mesocosm=="C3M1"]<-"2MH"
+O2$treatment[O2$mesocosm=="C3M2"]<-"2MH"
+O2$treatment[O2$mesocosm=="T0"]<-"T0"
+#O2$condition <- fct_relevel(O2$treatment, c("T0","C","HT","1MH","2MH"))
+
+# Divide the dataframe in 2 (1 for each species)
+#Alaria<-O2[O2$species=="Alaria",]
+#Saccharina<-O2[O2$species=="Saccharina",]
+
+# For each new data frame: duplicate the rows corresponding to T0 incubation into incorporate the T0 values in each facet (cf- ggplot below)
+# Alaria
+#Alaria_w2<-Alaria[rep(c(1:6),),]
+#Alaria_w2$Graph<-"2022-07-10"
+
+#Alaria_w2b<-Alaria[rep(c(1:6),),]
+#Alaria_w2b$Graph<-"2022-07-05"
+
+#Alaria_w5<-Alaria[rep(c(1:6),),]
+#Alaria_w5$Graph<-"2022-07-12"
+
+#Alaria_w6<-Alaria[rep(c(1:6),),]
+#Alaria_w6$Graph<-"2022-07-14"
+
+#Alaria_w7<-Alaria[rep(c(1:6),),]
+#Alaria_w7$Graph<-"2022-07-14"
+
+#Alaria_TF<-Alaria[rep(c(1:6),),]
+#Alaria_TF$Graph<-"TF"
+
+#Alaria<-Alaria[Alaria$week!="T0",]
+#Alaria$Graph<-Alaria$week
+
+#Alaria<-rbind(Alaria,Alaria_w2,Alaria_w2b,Alaria_w5,Alaria_w6,Alaria_w7,Alaria_TF)
+#rm(Alaria_w2,Alaria_w5,Alaria_TF)
+
+
+# Saccharina
+#Saccharina_w2<-Saccharina[rep(c(1:6),),]
+#Saccharina_w2$Graph<-"2022-07-10"
+
+#Saccharina_w2b<-Saccharina[rep(c(1:6),),]
+#Saccharina_w2b$Graph<-"2022-07-05"
+
+#Saccharina_w5<-Saccharina[rep(c(1:6),),]
+#Saccharina_w5$Graph<-"2022-07-12"
+
+#Saccharina_w6<-Saccharina[rep(c(1:6),),]
+#Saccharina_w6$Graph<-"2022-07-14"
+
+#Saccharina_w7<-Saccharina[rep(c(1:6),),]
+#Saccharina_w7$Graph<-"2022-07-14"
+
+#Saccharina_TF<-Saccharina[rep(c(1:6),),]
+#Saccharina_TF$Graph<-"TF"
+
+#Saccharina<-Saccharina[Saccharina$week!="T0",]
+#Saccharina$Graph<-Saccharina$week
+
+#Saccharina<-rbind(Saccharina,Saccharina_w2,Saccharina_w2b,Saccharina_w5,Saccharina_w6,Saccharina_w7,Saccharina_TF)
+#rm(Saccharina_w2,Saccharina_w5,Saccharina_TF)
+
+# Create a condition_week column
+#Alaria$condition_week<-paste(Alaria$condition,Alaria$week,sep="_")
+#Saccharina$condition_week<-paste(Saccharina$condition,Saccharina$week,sep="_")
+
+#O2<-rbind(Alaria,Saccharina)
+
+# Define the order of apparition on the facet
+O2$treatment[O2$week=="2022-07-05"]<-"IncreasTemp"
+O2$treatment <- fct_relevel(O2$treatment, c("T0","IncreasTemp","C","HT","1MH","2MH"))
+
+# Plot ####
+
+ggplot(O2,aes(y=O2_normalized,x=date,colour=treatment))+
+  #geom_jitter(size=3)+ 
+  geom_errorbar(aes(ymin=O2_normalized-std_normalized, ymax=O2_normalized+std_normalized), width=.2,position=position_dodge(0.05))+
+  scale_colour_manual(values=c("#cccccc","#92c5de","#0571b0","#f4a582","#ca0020"))+
+  ylab(bquote('µmol O2'(min^-1,FW^-1)))+
+  xlab(bquote('conditions'))+
+  facet_wrap(~species)+
   theme_fira()
 
-SalinityTemp  <- read_excel("Desktop/These/Meso NYA 2021/O2/data/SalinityTemp.xlsx", col_types = c("date", "text", "text", "numeric","numeric"))
-SalinityTemp$Meso<-paste("S",SalinityTemp$Mesocosm,sep="_")
-coeff <- 2
+O2$date_modified<-0 # T0
 
-ggplot(data=SalinityTemp)+
-  geom_line(aes(x=Date,y=Temperature,color=Mesocosm),alpha=0.7)+
-  geom_line(aes(x=Date,y=Salinity/coeff,color=Meso),alpha=0.7)+
-  scale_color_manual(values=c("#79E671","#679E57","#3F6035","#92c5de","#0571b0","#0041B6"))+
-  #scale_colour_manual(values=c("#92c5de","#0571b0","#0041B6"))+
-  scale_y_continuous(
-    # Features of the first axis
-    name = "Temperature",
-    # Add a second axis and specify its features
-    sec.axis = sec_axis(~.*coeff, name="Salinity"))+
-  facet_wrap(~Condition)+
+#2022-07-05, J3, 0.75
+O2$date_modified[O2$week=="2022-07-05"&O2$treatment=="IncreasTemp"]<-0.75
+
+#2022-07-10, J8, 2
+O2$date_modified[O2$week=="2022-07-10"&O2$treatment=="1MH"]<-1.94
+O2$date_modified[O2$week=="2022-07-10"&O2$treatment=="2MH"]<-2.07
+
+#2022-07-12, J10, 2.5
+O2$date_modified[O2$week=="2022-07-12"&O2$treatment=="C"]<-2.5
+
+#2022-07-14, J12, 3
+O2$date_modified[O2$week=="2022-07-14"&O2$treatment=="HT"]<-2.94
+O2$date_modified[O2$week=="2022-07-14"&O2$treatment=="2MH"]<-3.07
+
+#2022-07-18, J16, 4
+O2$date_modified[O2$week=="2022-07-18"&O2$treatment=="1MH"]<-3.94
+O2$date_modified[O2$week=="2022-07-18"&O2$treatment=="2MH"]<-4.07
+
+#2022-07-21 & 22, TF, 5
+O2$date_modified[O2$week=="TF"&O2$treatment=="C"]<-4.87
+O2$date_modified[O2$week=="TF"&O2$treatment=="HT"]<-4.93
+O2$date_modified[O2$week=="TF"&O2$treatment=="1MH"]<-5.07
+O2$date_modified[O2$week=="TF"&O2$treatment=="2MH"]<-5.125
+
+O2$date_modified<-as.numeric(O2$date_modified)
+O2$grp<-paste(O2$species,"_",O2$treatment,"_",O2$date)
+
+ggplot(O2,aes(y=O2_normalized,x=date_modified,color=treatment))+
+  geom_jitter(shape = 16,size=3,alpha=0.8)+
+  geom_boxplot(aes(group=grp,fill=treatment),outlier.alpha = 0)+
+  facet_wrap(species~.,ncol=1)+
+  scale_fill_manual(values=c("lightgrey","#404040","#92c5de","#E48121","#FC1D28","#901C21"))+
+  scale_color_manual(values=c("lightgrey","#404040","#92c5de","#E48121","#FC1D28","#901C21"))+
+  stat_summary(aes(y=5,x=date_modified),colour="black",data=O2,fun.data = give.n, geom = "text",size=8)+
   theme_fira()+
+  scale_x_continuous(label=c("07-02","07-05","07-10","07-12","07-14","07-18","07-21 & 22"),breaks=c(0,0.75,2,2.5,3,4,5))+
+  scale_y_continuous(limits=c(0.0,6),breaks=c(0,1,2,3,4,5),expand = expansion(mult = c(0,0)))+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
-        axis.text = element_text(size = rel(0.9)),
+        axis.text = element_text(size = rel(2)),
         strip.text.x = element_text(size = rel(2)),
-        panel.border = element_rect(colour = "black", fill=NA))+
-  scale_x_datetime(date_breaks="10 days",limits=as.POSIXct(c("2021-06-30 22:01","2021-08-28 13:01")))
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="right")+
+   ylab(bquote(F[v]/F[m]))+
+  labs(x="time")
 
-# 1 graph for Temp
-ggplot(data=SalinityTemp)+
-  annotate("rect", xmin = as.POSIXct("2021-06-30 22:01"), xmax = as.POSIXct("2021-07-16 00:01"), ymin = 2.5, ymax = 13, alpha = .2)+
-  geom_line(aes(x=Date,y=Temperature,color=Condition),alpha=0.7)+
-  scale_color_manual(values=c("#92c5de","#0571b0","#f4a582","#ca0020"))+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
-        axis.text = element_text(size = rel(1.2)),
-        strip.text.x = element_text(size = rel(2)),
-        panel.border = element_rect(colour = "black", fill=NA))+
-  scale_x_datetime(date_breaks="10 days",limits=as.POSIXct(c("2021-06-30 22:01","2021-08-28 13:01")))+
-  scale_y_continuous(limits=c(2.5,13),expand = expansion(mult = c(0,0)))
+# Remove outliers
+library(EnvStats)
+library(ggpubr)
+# the parameter k defines the number of potential outlier in a dataset, the default k value is 3
+O2_Alaria<-O2[O2$species=="Alaria",]
 
-# 1 graph for Salinity
-ggplot(data=SalinityTemp)+
-  annotate("rect", xmin = as.POSIXct("2021-06-30 22:01"), xmax = as.POSIXct("2021-07-16 00:01"), ymin = 19, ymax = 37, alpha = .2)+
-  geom_line(aes(x=Date,y=Salinity,color=Condition),alpha=0.7)+
-  scale_color_manual(values=c("#92c5de","#0571b0","#f4a582","#ca0020"))+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
-        axis.text = element_text(size = rel(1.2)),
-        strip.text.x = element_text(size = rel(2)),
-        panel.border = element_rect(colour = "black", fill=NA))+
-  scale_x_datetime(date_breaks="10 days",limits=as.POSIXct(c("2021-06-30 22:01","2021-08-28 13:01")))+
-    scale_y_continuous(limits=c(19,37),expand = expansion(mult = c(0,0)))
+O2_Alaria_T0<-O2_Alaria[O2_Alaria$week=="T0",]
+rosnerTest(O2_Alaria_T0$O2_normalized, k = 1)$all.stats # no outlier : 0.0623768186
+shapiro.test(O2_Alaria_T0$O2_normalized) # Normal (pvalue>0.05)
+ggqqplot(O2_Alaria_T0$O2_normalized)
 
-# 1 graph for Irradiance
+O2_Alaria_10<-O2_Alaria[O2_Alaria$week=="2022-07-10",]
+rosnerTest(O2_Alaria_10$O2_normalized, k = 1)$all.stats # 1 outlier
+O2<-O2[!O2$O2_normalized>=0.06,]
+O2_Alaria<-O2[O2$species=="Alaria",]
+O2_Alaria_10<-O2_Alaria[O2_Alaria$week=="2022-07-10",]
+shapiro.test(O2_Alaria_10$O2_normalized)
+ggqqplot(O2_Alaria_10$O2_normalized)
 
-ggplot(data=PAR_alltogether)+
-  geom_line(aes(x=DateTime_rounded,y=C0M0,color=Condition),alpha=0.7)+
-  scale_color_manual(values=c("#92c5de","#0571b0","#f4a582","#ca0020"))+
-  facet_wrap(~Condition)+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
-        axis.text = element_text(size = rel(0.9)),
-        strip.text.x = element_text(size = rel(2)),
-        panel.border = element_rect(colour = "black", fill=NA))+
-  scale_x_datetime(date_breaks="10 days",limits=as.POSIXct(c("2021-06-30 22:01","2021-08-28 13:01")))
+O2_Alaria_10_1MH<-O2_Alaria_10[O2_Alaria_10$treatment=="1MH",]
+rosnerTest(O2_Alaria_10_1MH$O2_normalized, k = 1)$all.stats
 
-# 1 graph for Irradiance in log
-ggplot(data=PAR_alltogether,aes(x=DateTime_rounded,y=log(C0M0),color=Condition))+
-  annotate("rect", xmin = as.POSIXct("2021-06-30 22:01"), xmax = as.POSIXct("2021-07-16 00:01"), ymin = -2.5, ymax = 7, alpha = .2)+
-  geom_line(alpha=0.1)+
-  geom_smooth(size=0.9)+
-  #geom_smooth(method=lm , color="red", fill="#69b3a2", se=TRUE) +
-  #stat_smooth(method=loess,size=1.2, span=.6)+
-  scale_color_manual(values=c("#92c5de","#0571b0","#f4a582","#ca0020"))+
-  theme_fira()+
-  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
-        axis.text = element_text(size = rel(1.2)),
-        strip.text.x = element_text(size = rel(2)),
-        panel.border = element_rect(colour = "black", fill=NA))+
-  scale_x_datetime(date_breaks="10 days",limits=as.POSIXct(c("2021-06-30 22:01","2021-08-28 13:01")))+
-  scale_y_continuous(limits=c(-2.5,7),expand = expansion(mult = c(0,0)))
+O2_Alaria_10_2MH<-O2_Alaria_10[O2_Alaria_10$treatment=="2MH",]
+rosnerTest(O2_Alaria_10_2MH$O2_normalized, k = 1)$all.stats
+
+O2_Alaria_TF<-O2_Alaria[O2_Alaria$week=="TF",]
+O2_Alaria_TF_2MH<-O2_Alaria_TF[O2_Alaria_TF$treatment=="2MH",]
+rosnerTest(O2_Alaria_TF_2MH$O2_normalized, k = 1)$all.stats
+shapiro.test(O2_Alaria_TF_2MH$O2_normalized)# Normal (pvalue>0.05)
+ggqqplot(O2_Alaria_TF_2MH$O2_normalized)
+
+# SACCHARINA
+O2_Saccharina<-O2[O2$species=="Saccharina",]
+
+O2_Saccharina_T0<-O2_Saccharina[O2_Saccharina$week=="T0",]
+rosnerTest(O2_Saccharina_T0$O2_normalized, k = 1)$all.stats
+
+O2_Saccharina_05<-O2_Saccharina[O2_Saccharina$week=="2022-07-05",]
+rosnerTest(O2_Saccharina_05$O2_normalized, k = 2)$all.stats # 2 outliers
+O2<-O2[!(O2$O2_normalized>=0.03&O2$week=="2022-07-05"),]
+O2_Saccharina<-O2[O2$species=="Saccharina",]
+O2_Saccharina_05<-O2_Saccharina[O2_Saccharina$week=="2022-07-05",]
+shapiro.test(O2_Saccharina_05$O2_normalized)# Normal (pvalue>0.05)
+ggqqplot(O2_Saccharina_05$O2_normalized)
+
+O2_Saccharina_10<-O2_Saccharina[O2_Saccharina$week=="2022-07-10",]
+rosnerTest(O2_Saccharina_10$O2_normalized, k = 1)$all.stats # no outlier
+
+O2_Saccharina_10_1MH<-O2_Saccharina_10[O2_Saccharina_10$treatment=="1MH",]
+rosnerTest(O2_Saccharina_10_1MH$O2_normalized, k = 1)$all.stats
+O2_Saccharina_10_2MH<-O2_Saccharina_10[O2_Saccharina_10$treatment=="2MH",]
+rosnerTest(O2_Saccharina_10_2MH$O2_normalized, k = 1)$all.stats
+
+O2_Saccharina_18<-O2_Saccharina[O2_Saccharina$week=="2022-07-18",]
+rosnerTest(O2_Saccharina_18$O2_normalized, k = 1)$all.stats # no outlier
+
+O2_Saccharina_18_1MH<-O2_Saccharina_18[O2_Saccharina_18$treatment=="1MH",]
+rosnerTest(O2_Saccharina_18_1MH$O2_normalized, k = 1)$all.stats # no outlier
+
+O2_Saccharina_18_2MH<-O2_Saccharina_18[O2_Saccharina_18$treatment=="2MH",]
+rosnerTest(O2_Saccharina_18_2MH$O2_normalized, k = 1)$all.stats # no outlier
+
+# Rbind
+#O2<-rbind()
+rm(O2_Alaria,O2_Alaria_T0,O2_Alaria_10,O2_Alaria_10_1MH,O2_Alaria_10_2MH)
+
+# Statistics ####
+# We want to compare each measurements of O2 synthesis mean between : conditions, replicates, species, weeks
+# To do so we can use a linear mixed-effects model
+# We can test 2 different models :
+# HLM (lmer) or GLM
+
+O2_Alaria<-O2[O2$species=="Alaria",]
+O2_hlm<-lmer(O2_normalized ~ week*treatment + (1|ID), data=O2_Alaria)
+Anova(O2_hlm)
+O2_glm<-glm(O2_normalized ~ week*treatment, data=O2_Alaria)
+Anova(O2_glm)
+emmeans(O2_glm, list(pairwise ~ week*treatment), adjust = "tukey")
+AIC(O2_hlm)
+AIC(O2_glm)
+# The glm has the lowest AIC, it's therefore the best model.
+rm(O2_hlm) # remove the 2nd model (the worst one)
+
+# significative differences:
+#(2022-07-10 1MH) - TF 1MH            1.841907 0.382 64   4.822  0.0039
+#(2022-07-10 1MH) - TF 2MH            1.736914 0.382 64   4.547  0.0097
+#(2022-07-10 1MH) - TF C              1.831604 0.382 64   4.795  0.0043
+#(2022-07-10 1MH) - (2022-07-14 HT)   1.927778 0.382 64   5.047  0.0018
 
 
+O2_Saccharina<-O2[O2$species=="Saccharina",]
+O2_hlm<-lmer(O2_normalized ~ week*treatment + (1|ID), data=O2_Saccharina)
+Anova(O2_hlm)
+O2_glm<-glm(O2_normalized ~ week*treatment, data=O2_Saccharina)
+Anova(O2_glm)
+emmeans(O2_glm, list(pairwise ~ week*treatment), adjust = "tukey")
+AIC(O2_hlm)
+AIC(O2_glm)
+# The glm has the lowest AIC, it's therefore the best model.
+rm(O2_hlm) # remove the 2nd model (the worst one)
+emmeans(O2_glm, list(pairwise ~ week*treatment), adjust = "tukey")
 
 ```
 
-
-
-
+Observations:<br>
