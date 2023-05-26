@@ -40,7 +40,7 @@ Let's first look at the temperature :
 - 1) within time for each condition.    
 - 2) the delta temperature between the control and each condition.   
 
-```{r setup, include=FALSE, warning=FALSE}
+```{r treatments design, include=FALSE, warning=FALSE}
 temperature <- read_excel("data/temperature.xlsx", 
      col_types = c("date", "numeric", "numeric", 
          "numeric", "numeric", "numeric", 
@@ -68,6 +68,7 @@ hour_temperature$C1<-rowMeans(hour_temperature[,4:6])
 hour_temperature$C2<-rowMeans(hour_temperature[,7:9])
 hour_temperature$C3<-rowMeans(hour_temperature[,10:12])
 
+hour_temperature<-hour_temperature[hour_temperature$date<="2022-07-23 12:00:00",]
 
 Temperature_plot<-ggplot(hour_temperature,aes(x=date))+
   geom_point(aes(y=C3),color="#901C21")+geom_line(aes(y=C3),size=3,color="#901C21",alpha=0.4)+
@@ -75,7 +76,7 @@ Temperature_plot<-ggplot(hour_temperature,aes(x=date))+
   geom_point(aes(y=C1),color="#E48121")+geom_line(aes(y=C1),size=3,color="#E48121",alpha=0.4)+
   geom_point(aes(y=C0),color="#92c5de")+ geom_line(aes(y=C0),size=3,color="#92c5de",alpha=0.4)+
   theme_fira()+
-  scale_x_datetime(minor_breaks = "day",breaks=seq(as.POSIXct("2022-06-30 12:46:11 CET"),as.POSIXct("2022-07-25 07:00:03 CET"), by="48 hours"),date_labels = "%m-%d")+
+  scale_x_datetime(minor_breaks = "day",breaks=seq(as.POSIXct("2022-06-30 12:46:11 CET"),as.POSIXct("2022-07-23 12:00:03 CET"), by="48 hours"),date_labels = "%m-%d")+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
         strip.text.x = element_text(size = rel(2)),
@@ -83,6 +84,34 @@ Temperature_plot<-ggplot(hour_temperature,aes(x=date))+
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="none")+
   labs(x="time",y="Temperature (°C)")
+
+# Median of temp in each treatment
+lapply(hour_temperature, median, na.rm = TRUE)
+#$C0
+#[1] 8.453333
+
+#$C1
+#[1] 10.15333
+
+#$C2
+#[1] 10.92
+
+#$C3
+#[1] 10.7
+
+lapply(hour_temperature, max, na.rm = TRUE)
+#$C0
+#[1] 10.17667
+
+#$C1
+#[1] 11.88667
+
+#$C2
+#[1] 12.93333
+
+#$C3
+#[1] 13.80333
+
 
 jpeg(filename = "figures/Temperature_plot.jpeg",width=950, height=650)
 Temperature_plot
@@ -97,7 +126,7 @@ delta_temperature_plot<-ggplot(delta_temperature,aes(x=date))+
   geom_point(aes(y=deltaC2),color="#FC1D28")+geom_line(aes(y=deltaC2),size=3,color="#FC1D28",alpha=0.4)+
   geom_point(aes(y=deltaC1),color="#E48121")+geom_line(aes(y=deltaC1),size=3,color="#E48121",alpha=0.4)+
   theme_fira()+
-  scale_x_datetime(minor_breaks = "day",breaks=seq(as.POSIXct("2022-06-30 12:46:11 CET"),as.POSIXct("2022-07-25 07:00:03 CET"), by="48 hours"),date_labels = "%m/%d")+
+  scale_x_datetime(minor_breaks = "day",breaks=seq(as.POSIXct("2022-06-30 12:46:11 CET"),as.POSIXct("2022-07-23 12:00:03 CET"), by="48 hours"),date_labels = "%m/%d")+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
         axis.text.x = element_text(angle = 60, vjust = 0.5, hjust=0.5),
@@ -114,7 +143,167 @@ dev.off()
 - The condition in orange is C1. It exhibits a +1.76°C and will be renamed as "HT" (for High Temperature) for the rest of the analysis.   
 - The condition in light red is C2. It exhibits a +1.76°C and 1 MHV of 13 days and will be renamed as "1MHV" (for 1 Marine Heatwave) for the rest of the analysis.   
 - The condition in dark red is C3. It exhibits a +1.76°C and 2 MHV of 5 days each and will be renamed as "2MHV" (for 2 Marine Heatwaves) for the rest of the analysis.   
+
+What happened in situ ? Let's look if we had a MHV dirung the experiment.
+
+```{r Heatwave, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
+library(devtools)
+packages <- c("devtools", "ggOceanMapsData", "ggOceanMaps")
+inst_packages <- packages %in% rownames(installed.packages())
+if (any(!inst_packages)) {
+  install.packages(packages[!inst_packages],
+          repos = c("https://cloud.r-project.org",
+                    "https://mikkovihtakari.github.io/drat")
+  )
+}
+
+coordinates <- data.frame(site_name=c("Havbruksstasjonen","Melhomen","Sommarøy","Kvaløyvågen"),
+                          latitude=c(69.87,69.88,69.63,69.85),
+                          longitude=c(18.93,18.86,17.97,18.82))
+#Heatwave
+# The packages we will need
+# install.packages("dplyr")
+# install.packages("lubridate")
+# install.packages("ggplot2")
+# install.packages("tidync")
+# install.packages("doParallel")
+# install.packages("rerddap")
+# install.packages("plyr") # Note that this library should never be loaded, only installed
+
+# The packages we will use
+library(dplyr) # A staple for modern data management in R
+library(lubridate) # Useful functions for dealing with dates
+library(ggplot2) # The preferred library for data visualisation
+library(tidync) # For easily dealing with NetCDF data
+library(rerddap) # For easily downloading subsets of data
+library(doParallel) # For parallel processing
+
+# The information for the NOAA OISST data
+rerddap::info(datasetid = "ncdcOisst21Agg_LonPM180", url = "https://coastwatch.pfeg.noaa.gov/erddap/")
+
+# Note that there is also a version with lon values from 0 yo 360
+rerddap::info(datasetid = "ncdcOisst21Agg", url = "https://coastwatch.pfeg.noaa.gov/erddap/")
+
+# This function downloads and prepares data based on user provided start and end dates
+OISST_sub_dl <- function(time_df){
+  OISST_dat <- rerddap::griddap(datasetx = "ncdcOisst21Agg_LonPM180",
+                                url = "https://coastwatch.pfeg.noaa.gov/erddap/", 
+                                time = c(time_df$start, time_df$end), 
+                                zlev = c(0, 0),
+                                latitude = c(69.5, 70),
+                                longitude = c(18.5, 19),
+                                fields = "sst")$data %>% 
+    dplyr::mutate(time = base::as.Date(stringr::str_remove(time, "T12:00:00Z"))) %>% 
+    dplyr::rename(t = time, temp = sst, lon = longitude, lat = latitude) %>% 
+    dplyr::select(lon, lat, t, temp) %>% 
+    stats::na.omit()
+}
+dl_years <- data.frame(date_index = 1:5,
+                       start = as.Date(c("1982-01-01", "1990-01-01", 
+                                         "1998-01-01", "2006-01-01", "2014-01-01")),
+                       end = as.Date(c("1989-12-31", "1997-12-31", 
+                                       "2005-12-31", "2013-12-31", "2022-12-31")))
+# Download all of the data with one nested request
+# The time this takes will vary greatly based on connection speed
+base::system.time(
+  OISST_data <- dl_years %>% 
+    dplyr::group_by(date_index) %>% 
+    dplyr::group_modify(~OISST_sub_dl(.x)) %>% 
+    dplyr::ungroup() %>% 
+    dplyr::select(lon, lat, t, temp)
+) # 518 seconds, ~100 seconds per batch
+OISST_data %>% 
+  #dplyr::filter(t == "2019-12-01") %>% 
+  ggplot2::ggplot(aes(x = lon, y = lat)) +
+  ggplot2::geom_tile(aes(fill = temp)) +
+  # ggplot2::borders() + # Activate this line to see the global map
+  ggplot2::scale_fill_viridis_c() +
+  ggplot2::coord_quickmap(expand = F) +
+  ggplot2::labs(x = NULL, y = NULL, fill = "SST (°C)") +
+  ggplot2::theme(legend.position = "bottom")
+base::saveRDS(OISST_data, file = "~/Desktop/OISST_vignette.Rds")
+
+OISST <- readRDS("~/Desktop/OISST_vignette.Rds")
+ts <- ts2clm(OISST, climatologyPeriod = c("1982-01-01", "2022-12-31"))
+mhw <- detect_event(ts)
+mhw2 <- mhw$climatology %>% 
+  slice(1:104807)
+mhw_top <- mhw2 %>% 
+  slice(103200:103900)
+
+hour_temperature$date<-as.Date(hour_temperature$date)
+ggplot()+
+  geom_flame(data = mhw_top,aes(x = t,y = temp, y2 = thresh, fill = "all"), show.legend = T) +
+  geom_flame(data = mhw_top, aes(x = t,y = temp, y2 = thresh, fill = "top"),  show.legend = T) +
+  geom_line(data = mhw_top,aes(x = t,y = temp, colour = "temp")) +
+  geom_line(data = mhw_top,aes(x = t,y = thresh, colour = "thresh"), size = 1.0) +
+  geom_line(data = mhw_top,aes(x = t,y = seas, colour = "seas"), size = 1.2) +
+  #geom_point(hour_temperature,mapping=aes(x=date,y=C3),color="#901C21")+
+  geom_line(hour_temperature,mapping=aes(x=date,y=C3),size=3,color="#901C21",alpha=0.4)+
+  #geom_point(hour_temperature,mapping=aes(x=date,y=C2),color="#FC1D28")+
+  geom_line(hour_temperature,mapping=aes(x=date,y=C2),size=3,color="#FC1D28",alpha=0.4)+
+  #geom_point(hour_temperature,mapping=aes(x=date,y=C1),color="#E48121")+
+  geom_line(hour_temperature,mapping=aes(x=date,y=C1),size=3,color="#E48121",alpha=0.4)+
+  #geom_point(hour_temperature,mapping=aes(x=date,y=C0),color="#92c5de")+
+  geom_line(hour_temperature,mapping=aes(x=date,y=C0),size=3,color="#92c5de",alpha=0.4)+
+  scale_colour_manual(name = "Line Colour",
+                      values = c("temp" = "black", 
+                                 "thresh" =  "forestgreen", 
+                                 "seas" = "grey80")) +
+  scale_fill_manual(name = "Event Colour", 
+                    values = c("all" = "salmon", 
+                               "top" = "red")) +
+  scale_x_date(date_labels = "%b %Y") +
+  guides(colour = guide_legend(override.aes = list(fill = NA))) +
+  labs(y = expression(paste("Temperature [", degree, "C]")), x = NULL)
+
+  
+  
     
+    theme_fira()+
+  scale_x_datetime(minor_breaks = "day",breaks=seq(as.POSIXct("2022-06-30 12:46:11 CET"),as.POSIXct("2022-07-23 12:00:03 CET"), by="48 hours"),date_labels = "%m-%d")+
+  theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
+        axis.text = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)),
+        axis.text.x = element_text(angle = 60, vjust = 0.5, hjust=0.5),
+        panel.border = element_rect(colour = "black", fill=NA),
+        legend.position="none")+
+  labs(x="time",y="Temperature (°C)")
+
+
+############
+library(heatwaveR)
+ts <- ts2clm(sst_WA, climatologyPeriod = c("1982-01-01", "2011-12-31"))
+mhw2 <- mhw$climatology %>% 
+  slice(10580:10720)
+mhw <- detect_event(ts)
+mhw_top <- mhw2 %>% 
+  slice(5:111)
+
+ggplot(data = mhw2, aes(x = t)) +
+  geom_flame(aes(y = temp, y2 = thresh, fill = "all"), show.legend = T) +
+  geom_flame(data = mhw_top, aes(y = temp, y2 = thresh, fill = "top"),  show.legend = T) +
+  geom_line(aes(y = temp, colour = "temp")) +
+  geom_line(aes(y = thresh, colour = "thresh"), size = 1.0) +
+  geom_line(aes(y = seas, colour = "seas"), size = 1.2) +
+  scale_colour_manual(name = "Line Colour",
+                      values = c("temp" = "black", 
+                                 "thresh" =  "forestgreen", 
+                                 "seas" = "grey80")) +
+  scale_fill_manual(name = "Event Colour", 
+                    values = c("all" = "salmon", 
+                               "top" = "red")) +
+  scale_x_date(date_labels = "%b %Y") +
+  guides(colour = guide_legend(override.aes = list(fill = NA))) +
+  labs(y = expression(paste("Temperature [", degree, "C]")), x = NULL)
+
+MHW <- detect_event(ts)
+MHW_cat <- category(MHW, S = TRUE, name = "WA")
+
+event_line(MHW, spread = 1000, start_date = "2000-11-01", end_date = "2019-06-30", category = TRUE)
+
+```
+
 ## 1° Chla <br>   
    
 Let's look at the chlorophyll a data.   
@@ -605,16 +794,6 @@ TukeyHSD(Anova_N)
 There was no significant difference observed in the C/N ratio, as well as the C and N content, between the conditions for any of the three species.
 
 ## 3° Diving PAM <br>
-```{r install chatpgt, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
-library(chatgpt)
-Sys.setenv(OPENAI_API_KEY = "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")
-ask_chatgpt("J'ai des données de quantum yield dans le dataframe Kelp_Pam le 02/07, 07/07, 11/07, 14/07, 18/07 et 22/07 pour 3 espèces de macroalgues (AE, LD et SL) ayant subis 4 conditions différentes : contrôle (C), high temperature (HT), 1 marine heatwaves (1MH) et 2 marine heatwaves (2MH). et répartis dans 12 mésocosmes différents donnant ainsi un triplicata de chaque conditions : 3 mésocosmes par conditions. Quelles analyse statistiques puis-je faire pour analyser la différence statistique du quantum yield en fonction du temps et des conditions subis par chaque espèce ? Ecris moi le code")
-
-Kelp_Pam(complete_code("Une fonction qui analyse la différence statistique du quantum yiled (Fv/Fm) en fonction du temps et des conditons subis par chaque espèce AE, LD et SL"))
-chatgpt::ask_chatgpt()
-
-```
-
 ```{r PAM, echo=FALSE, warning=FALSE, message=FALSE, results=FALSE,fig.width=15,fig.height=10}
 #### KELP ####
 Kelp_Pam <- read_excel("data/Kelp_Pam.xlsx", col_types = c("date", 
@@ -844,7 +1023,7 @@ Kelp_Pam_alongtime_plot_no_outlier<-ggplot(Kelp_PAM_no_outlier,aes(y=`Fv/Fm`,x=d
   scale_fill_manual(values=c("lightgrey","#92c5de","#E48121","#FC1D28","#901C21"))+
   scale_color_manual(values=c("lightgrey","#92c5de","#E48121","#FC1D28","#901C21"))+
   theme_fira()+
-  #stat_summary(aes(y=0.50,x=date_modified),colour="black",data=Kelp_PAM_no_outlier,fun.data = give.n, geom = "text",size=8)+
+  stat_summary(aes(y=0.60,x=date_modified),colour="black",data=Kelp_PAM_no_outlier,fun.data = give.n, geom = "text",size=8)+
   #scale_x_continuous(label=c("07-02","07-07","07-11","07-14","07-18","07-22"),breaks=c(0,2.5,4.5,6,8,10))+
   scale_x_continuous(label=c("07-02","07-07","07-11","07-14","07-18","07-22"),breaks=c(0,1.25,2.24,3,4,5))+
   scale_y_continuous(limits=c(0.500,0.910),breaks=c(0.55,0.65,0.75,0.85),expand = expansion(mult = c(0,0)))+
@@ -1657,7 +1836,7 @@ The third step is to normalize the $O_{2}$(µmol.L) rate with the biomass of the
 
 $$
 normalizedO_{2} (umol.g(dw)^-.^1min^-.^1) =  \frac{O_{2} (umol/L.min) * V(L)} {Biomass (g)}
-$$ <br> with V = Volume of the chamber, in L (V=30L for the big chamber and V=XXL for the small chamber) <br>
+$$ <br> with V = Volume of the chamber, in L (V=29L for the big chamber and V=23L for the small chamber) <br>
 
 In our case we used the dry weight (g). Each individual has been weighted before each incubation. We use a regression relation between the wet & the dry weight to calculate the dry weight from the wet one at each incubation time.
 
@@ -1748,8 +1927,8 @@ summary(O2_lm)
 legend("topleft",legend=paste("R2 is", format(summary(O2_lm)$r.squared,digits=3))) #R2 = 0.66
 # equation : log(y)=4.2797 + (-1.5663)*log(total_lenght) + 1.024
 # normality of standardized model residuals
-length_lm_std <- residuals(length_lm, type="pearson")
-shapiro.test(length_lm_std) #p-value = 0.108, normality verified
+length_lm_std <- residuals(O2_lm, type="pearson")
+shapiro.test(length_lm_std) #p-value = 0.089, normality verified
 qqnorm(length_lm_std)
 qqline(length_lm_std)
 hist(length_lm_std, xlab="standardized residuals")
@@ -1838,46 +2017,53 @@ O2<-O2_PAR_DW
 # Rq : To do so, we separate the dataframe per weeks to avoid mixing data (which happens without doing this)
 # Rq 2 : the std of the LM follow the same calculation
 
+# Big chamber -> 1m height -> 29.6 L 
+# Small chamber -> 80cm height -> 23.6 L 
+
+O2$volume<-29.6
+O2$volume[O2$Chamber=="Small"]<- 23.6
+
+
 T0 <- O2[O2$week=="T0",]
-T0$O2_normalized<-T0$estimate*30/T0$Dry_weight
+T0$O2_normalized<-T0$estimate*T0$volume*60/T0$Dry_weight
 T0$variance<-T0$std.error^2
-T0$variance<-T0$variance*30/T0$Dry_weight
+T0$variance<-T0$variance*T0$volume*60/T0$Dry_weight
 T0$std_normalized<-sqrt(T0$variance)
 
 Week1b <- O2[O2$week=="2022-07-05",]
-Week1b$O2_normalized<-Week1b$estimate*30/Week1b$Dry_weight
+Week1b$O2_normalized<-Week1b$estimate*Week1b$volume*60/Week1b$Dry_weight
 Week1b$variance<-Week1b$std.error^2
-Week1b$variance<-Week1b$variance*30/Week1b$Dry_weight
+Week1b$variance<-Week1b$variance*Week1b$volume*60/Week1b$Dry_weight
 Week1b$std_normalized<-sqrt(Week1b$variance)
 
 Week1 <- O2[O2$week=="2022-07-10",]
-Week1$O2_normalized<-Week1$estimate*30/Week1$Dry_weight
+Week1$O2_normalized<-Week1$estimate*Week1$volume*60/Week1$Dry_weight
 Week1$variance<-Week1$std.error^2
-Week1$variance<-Week1$variance*30/Week1$Dry_weight
+Week1$variance<-Week1$variance*Week1$volume*60/Week1$Dry_weight
 Week1$std_normalized<-sqrt(Week1$variance)
 
 Week2 <- O2[O2$week=="2022-07-12",]
-Week2$O2_normalized<-Week2$estimate*30/Week2$Dry_weight
+Week2$O2_normalized<-Week2$estimate*Week2$volume*60/Week2$Dry_weight
 Week2$variance<-Week2$std.error^2
-Week2$variance<-Week2$variance*30/Week2$Dry_weight
+Week2$variance<-Week2$variance*Week2$volume*60/Week2$Dry_weight
 Week2$std_normalized<-sqrt(Week2$variance)
 
 Week3 <- O2[O2$week=="2022-07-14",]
-Week3$O2_normalized<-Week3$estimate*30/Week3$Dry_weight
+Week3$O2_normalized<-Week3$estimate*Week3$volume*60/Week3$Dry_weight
 Week3$variance<-Week3$std.error^2
-Week3$variance<-Week3$variance*30/Week3$Dry_weight
+Week3$variance<-Week3$variance*Week3$volume*60/Week3$Dry_weight
 Week3$std_normalized<-sqrt(Week3$variance)
 
 Week4 <- O2[O2$week=="2022-07-18",]
-Week4$O2_normalized<-Week4$estimate*30/Week4$Dry_weight
+Week4$O2_normalized<-Week4$estimate*Week4$volume*60/Week4$Dry_weight
 Week4$variance<-Week4$std.error^2
-Week4$variance<-Week4$variance*30/Week4$Dry_weight
+Week4$variance<-Week4$variance*Week4$volume*60/Week4$Dry_weight
 Week4$std_normalized<-sqrt(Week4$variance)
 
 TF <- O2[O2$week=="TF",]
-TF$O2_normalized<-TF$estimate*30/TF$Dry_weight
+TF$O2_normalized<-TF$estimate*TF$volume*60/TF$Dry_weight
 TF$variance<-TF$std.error^2
-TF$variance<-TF$variance*30/TF$Dry_weight
+TF$variance<-TF$variance*TF$volume*60/TF$Dry_weight
 TF$std_normalized<-sqrt(TF$variance)
 
 O2<-rbind(T0, Week1,Week1b, Week2, Week3, Week4, TF)
@@ -1966,6 +2152,9 @@ O2$treatment[O2$mesocosm=="T0"]<-"T0"
 O2$treatment[O2$week=="2022-07-05"]<-"IncreasTemp"
 O2$treatment <- fct_relevel(O2$treatment, c("T0","IncreasTemp","C","HT","1MH","2MH"))
 
+give.n <- function(x){
+   return(c(y = mean(x), label = length(x)))
+}
 # Plot ####
 
 ggplot(O2,aes(y=O2_normalized,x=date,colour=treatment))+
@@ -2008,21 +2197,20 @@ O2$grp<-paste(O2$species,"_",O2$treatment,"_",O2$date)
 
 ggplot(O2,aes(y=O2_normalized,x=date_modified,color=treatment))+
   geom_jitter(shape = 16,size=3,alpha=0.8)+
-  geom_boxplot(aes(group=grp,fill=treatment),outlier.alpha = 0)+
+  geom_boxplot(aes(group=grp,fill=treatment),color="black",outlier.alpha = 0)+
   facet_wrap(species~.,ncol=1)+
   scale_fill_manual(values=c("lightgrey","#404040","#92c5de","#E48121","#FC1D28","#901C21"))+
   scale_color_manual(values=c("lightgrey","#404040","#92c5de","#E48121","#FC1D28","#901C21"))+
-  stat_summary(aes(y=5,x=date_modified),colour="black",data=O2,fun.data = give.n, geom = "text",size=8)+
+  stat_summary(aes(y=275,x=date_modified),colour="black",data=O2,fun.data = give.n, geom = "text",size=8)+
   theme_fira()+
   scale_x_continuous(label=c("07-02","07-05","07-10","07-12","07-14","07-18","07-21 & 22"),breaks=c(0,0.75,2,2.5,3,4,5))+
-  scale_y_continuous(limits=c(0.0,6),breaks=c(0,1,2,3,4,5),expand = expansion(mult = c(0,0)))+
+  scale_y_continuous(limits=c(0,330),breaks=c(0,50,100,150,200,250,300),expand = expansion(mult = c(0,0)))+
   theme(axis.title = element_text(size = rel(1.5), hjust=0.5),
         axis.text = element_text(size = rel(2)),
         strip.text.x = element_text(size = rel(2)),
         panel.border = element_rect(colour = "black", fill=NA),
         legend.position="right")+
-   ylab(bquote(F[v]/F[m]))+
-  labs(x="time")
+  labs(y="photosynthetic rate",x="time")
 
 # Remove outliers
 library(EnvStats)
@@ -2031,15 +2219,12 @@ library(ggpubr)
 O2_Alaria<-O2[O2$species=="Alaria",]
 
 O2_Alaria_T0<-O2_Alaria[O2_Alaria$week=="T0",]
-rosnerTest(O2_Alaria_T0$O2_normalized, k = 1)$all.stats # no outlier : 0.0623768186
+rosnerTest(O2_Alaria_T0$O2_normalized, k = 1)$all.stats # no outlier
 shapiro.test(O2_Alaria_T0$O2_normalized) # Normal (pvalue>0.05)
 ggqqplot(O2_Alaria_T0$O2_normalized)
 
 O2_Alaria_10<-O2_Alaria[O2_Alaria$week=="2022-07-10",]
-rosnerTest(O2_Alaria_10$O2_normalized, k = 1)$all.stats # 1 outlier
-O2<-O2[!O2$O2_normalized>=0.06,]
-O2_Alaria<-O2[O2$species=="Alaria",]
-O2_Alaria_10<-O2_Alaria[O2_Alaria$week=="2022-07-10",]
+rosnerTest(O2_Alaria_10$O2_normalized, k = 2)$all.stats # NO OUTLIER
 shapiro.test(O2_Alaria_10$O2_normalized)
 ggqqplot(O2_Alaria_10$O2_normalized)
 
@@ -2059,11 +2244,11 @@ ggqqplot(O2_Alaria_TF_2MH$O2_normalized)
 O2_Saccharina<-O2[O2$species=="Saccharina",]
 
 O2_Saccharina_T0<-O2_Saccharina[O2_Saccharina$week=="T0",]
-rosnerTest(O2_Saccharina_T0$O2_normalized, k = 1)$all.stats
+rosnerTest(O2_Saccharina_T0$O2_normalized, k = 1)$all.stats # 1 outlier : 704.4594
 
 O2_Saccharina_05<-O2_Saccharina[O2_Saccharina$week=="2022-07-05",]
 rosnerTest(O2_Saccharina_05$O2_normalized, k = 2)$all.stats # 2 outliers
-O2<-O2[!(O2$O2_normalized>=0.03&O2$week=="2022-07-05"),]
+O2<-O2[!(O2$O2_normalized>=250&O2$week=="2022-07-05"),]
 O2_Saccharina<-O2[O2$species=="Saccharina",]
 O2_Saccharina_05<-O2_Saccharina[O2_Saccharina$week=="2022-07-05",]
 shapiro.test(O2_Saccharina_05$O2_normalized)# Normal (pvalue>0.05)
@@ -2097,35 +2282,40 @@ rm(O2_Alaria,O2_Alaria_T0,O2_Alaria_10,O2_Alaria_10_1MH,O2_Alaria_10_2MH)
 # HLM (lmer) or GLM
 
 O2_Alaria<-O2[O2$species=="Alaria",]
-O2_hlm<-lmer(O2_normalized ~ week*treatment + (1|ID), data=O2_Alaria)
-Anova(O2_hlm)
 O2_glm<-glm(O2_normalized ~ week*treatment, data=O2_Alaria)
 Anova(O2_glm)
 emmeans(O2_glm, list(pairwise ~ week*treatment), adjust = "tukey")
-AIC(O2_hlm)
-AIC(O2_glm)
-# The glm has the lowest AIC, it's therefore the best model.
-rm(O2_hlm) # remove the 2nd model (the worst one)
+
 
 # significative differences:
-#(2022-07-10 1MH) - TF 1MH            1.841907 0.382 64   4.822  0.0039
-#(2022-07-10 1MH) - TF 2MH            1.736914 0.382 64   4.547  0.0097
-#(2022-07-10 1MH) - TF C              1.831604 0.382 64   4.795  0.0043
-#(2022-07-10 1MH) - (2022-07-14 HT)   1.927778 0.382 64   5.047  0.0018
+#                                                     estimate   SE df t.ratio p.value
+# (2022-07-10 1MH) - TF 2MH                              85.10 20.3 66   4.196  0.0380
+# TF HT - (2022-07-10 1MH)                              -97.14 20.3 66  -4.789  0.0058
+# (2022-07-14 HT) - (2022-07-10 1MH)                    -92.51 20.3 66  -4.561  0.0123
+# TF C - (2022-07-10 1MH)                               -93.96 20.3 66  -4.632  0.0097
 
+# (2022-07-10 1MH) - TF 1MH                              90.69 20.3 66   4.471  0.0163
+
+# (2022-07-05 IncreasTemp) - TF 2MH                      83.45 18.1 66   4.613  0.0104
+# (2022-07-05 IncreasTemp) - TF 1MH                      89.05 18.1 66   4.923  0.0037
+# (2022-07-05 IncreasTemp) - TF HT                       95.50 18.1 66   5.279  0.0010
+# (2022-07-05 IncreasTemp) - TF C                        92.31 18.1 66   5.103  0.0019
+
+# (2022-07-05 IncreasTemp) - (2022-07-14 HT)             90.87 18.1 66   5.023  0.0026
+
+# T0 T0 - (2022-07-14 2MH)                               72.63 18.1 66   4.015  0.0637
+# T0 T0 - (2022-07-14 HT)                               106.79 18.1 66   5.903  0.0001
+
+# T0 T0 - TF 1MH                                        104.97 18.1 66   5.803  0.0001
+# T0 T0 - TF 2MH                                         99.37 18.1 66   5.493  0.0005
+# T0 T0 - TF HT                                         111.42 18.1 66   6.159  <.0001
+# T0 T0 - TF C                                          108.23 18.1 66   5.983  0.0001
 
 O2_Saccharina<-O2[O2$species=="Saccharina",]
-O2_hlm<-lmer(O2_normalized ~ week*treatment + (1|ID), data=O2_Saccharina)
-Anova(O2_hlm)
 O2_glm<-glm(O2_normalized ~ week*treatment, data=O2_Saccharina)
 Anova(O2_glm)
 emmeans(O2_glm, list(pairwise ~ week*treatment), adjust = "tukey")
-AIC(O2_hlm)
-AIC(O2_glm)
-# The glm has the lowest AIC, it's therefore the best model.
-rm(O2_hlm) # remove the 2nd model (the worst one)
-emmeans(O2_glm, list(pairwise ~ week*treatment), adjust = "tukey")
+#                                                     estimate   SE df t.ratio p.value
+#T0 T0 - (2022-07-14 HT)                               189.77 45.2 58   4.196  0.0412
 
 ```
-
-Observations:<br>
